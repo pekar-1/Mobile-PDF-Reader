@@ -26,14 +26,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun HomeScreen(
-    onOpenDocument: (Uri) -> Unit,
+    onOpenFile: (Uri) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
-    val recents by viewModel.recentDocuments.collectAsStateWithLifecycle()
+    val recents by viewModel.recentFiles.collectAsStateWithLifecycle()
     val picker = rememberLauncherForActivityResult(
-        contract = OpenPdfDocumentContract(),
+        contract = OpenPdfFileContract(),
     ) { uri ->
-        uri?.let(onOpenDocument)
+        uri?.let(onOpenFile)
     }
 
     Column(
@@ -51,16 +51,16 @@ fun HomeScreen(
             Text(text = "Brak ostatnio otwartych plików.")
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(recents, key = { it.uri }) { document ->
+                items(recents, key = { it.uri }) { file ->
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenDocument(Uri.parse(document.uri)) }
+                            .clickable { onOpenFile(Uri.parse(file.uri)) }
                             .padding(vertical = 10.dp),
                     ) {
-                        Text(text = document.displayName, style = MaterialTheme.typography.bodyLarge)
+                        Text(text = file.displayName, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            text = "${document.pageCount} str.",
+                            text = "${file.pageCount} str.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -71,7 +71,7 @@ fun HomeScreen(
     }
 }
 
-private class OpenPdfDocumentContract : ActivityResultContracts.OpenDocument() {
+private class OpenPdfFileContract : ActivityResultContracts.OpenDocument() {
     override fun createIntent(context: Context, input: Array<String>): Intent {
         return super.createIntent(context, input).addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or

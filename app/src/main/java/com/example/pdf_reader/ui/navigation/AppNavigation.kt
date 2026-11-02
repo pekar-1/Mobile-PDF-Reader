@@ -25,7 +25,7 @@ fun AppNavigation(
     ) {
         composable(ROUTE_HOME_PAGE) {
             HomeScreen(
-                onOpenDocument = { uri ->
+                onOpenFile = { uri ->
                     navController.navigate("reader?$ARG_URI=${Uri.encode(uri.toString())}")
                 },
             )
