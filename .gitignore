@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Patch/merge backups
+*.orig
+
+# IDE: project display name (machine-local)
+/.idea/.name
