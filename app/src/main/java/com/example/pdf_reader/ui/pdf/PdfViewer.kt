@@ -180,7 +180,7 @@ fun PdfViewer(
                 sizes.firstOrNull()?.let { ((it.width / it.height) * height).toInt() }
                     ?: (viewportWidth * 0.72f).toInt()
             }
-            ReadingMode.SinglePage -> (viewportWidth - 2 * paddingPx).toInt()
+            ReadingMode.SinglePage -> viewportWidth.toInt()
         }
         val renderWidthPx = if (basePageWidthPx > 0) {
             ZoomMath.renderWidthPx(basePageWidthPx, if (zoomable) zoom.scale else 1f)
@@ -408,9 +408,7 @@ private fun SinglePageView(
                 manager = manager,
                 index = pageIndex,
                 renderWidthPx = renderWidthPx,
-                modifier = Modifier
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 highRes = HighResContext(zoom, viewport),
                 overlays = pageOverlays,
                 registry = registry,
