@@ -7,12 +7,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +46,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
@@ -90,7 +98,10 @@ internal class ViewportRef {
 fun PdfViewer(
     manager: PdfDocumentManager,
     modifier: Modifier = Modifier,
+    mode: ReadingMode = ReadingMode.Vertical,
     state: LazyListState = rememberLazyListState(),
+    pageIndex: Int = 0,
+    onPageIndexChange: (Int) -> Unit = {},
     search: SearchState? = null,
     selection: SelectionState? = rememberSelectionState(manager),
     overlays: List<PageOverlay> = emptyList(),
@@ -100,25 +111,26 @@ fun PdfViewer(
     val scope = rememberCoroutineScope()
     val zoom = rememberZoomState(state, scope)
     val viewport = remember { ViewportRef() }
-    val layer = remember { ViewportRef() } // The transformed layer holding pages and handles.
+    val layer = remember { ViewportRef() }
     val registry = remember { PageRegistry() }
     val pageOverlays = remember(search, selection, overlays) {
         listOfNotNull(search?.overlay, selection?.overlay) + overlays
     }
 
-    // Scrolls while a selection drag is near the top or bottom edge.
-    val autoScroll: (Offset) -> Unit = remember(state, viewport) {
+    val autoScroll: (Offset) -> Unit = remember(state, viewport, mode) {
         { window ->
-            viewport.coordinates?.takeIf { it.isAttached }?.let { coords ->
-                val y = coords.windowToLocal(window).y
-                val height = coords.size.height.toFloat()
-                val edge = height * AUTO_SCROLL_EDGE
-                val delta = when {
-                    y < edge -> -(edge - y) * AUTO_SCROLL_SPEED
-                    y > height - edge -> (y - (height - edge)) * AUTO_SCROLL_SPEED
-                    else -> 0f
+            if (mode == ReadingMode.Vertical) {
+                viewport.coordinates?.takeIf { it.isAttached }?.let { coords ->
+                    val y = coords.windowToLocal(window).y
+                    val height = coords.size.height.toFloat()
+                    val edge = height * AUTO_SCROLL_EDGE
+                    val delta = when {
+                        y < edge -> -(edge - y) * AUTO_SCROLL_SPEED
+                        y > height - edge -> (y - (height - edge)) * AUTO_SCROLL_SPEED
+                        else -> 0f
+                    }
+                    if (delta != 0f) state.dispatchRawDelta(delta)
                 }
-                if (delta != 0f) state.dispatchRawDelta(delta)
             }
         }
     }
@@ -126,91 +138,309 @@ fun PdfViewer(
     if (selection != null) SelectionToolbar(selection, registry, state, zoom)
 
     if (search != null) {
-        search.firstVisiblePage = { state.firstVisibleItemIndex }
-        LaunchedEffect(search, state, zoom) {
+        search.firstVisiblePage = {
+            when (mode) {
+                ReadingMode.SinglePage -> pageIndex
+                else -> state.firstVisibleItemIndex
+            }
+        }
+        LaunchedEffect(search, state, zoom, mode) {
             snapshotFlow { search.navigationTick }
                 .distinctUntilChanged()
-                .collect { tick -> if (tick > 0) search.current?.let { scrollToHit(it, state, zoom) } }
+                .collect { tick ->
+                    if (tick <= 0) return@collect
+                    val hit = search.current ?: return@collect
+                    if (mode == ReadingMode.SinglePage) {
+                        onPageIndexChange(hit.pageIndex)
+                    } else {
+                        scrollToHit(hit, state, zoom)
+                    }
+                }
         }
     }
 
+    val zoomable = mode == ReadingMode.Vertical
     BoxWithConstraints(
         modifier
             .clipToBounds()
             .onGloballyPositioned { viewport.coordinates = it }
-            .zoomGestures(zoom),
+            .then(if (zoomable) Modifier.zoomGestures(zoom) else Modifier),
     ) {
         val paddingPx = with(LocalDensity.current) { PagePadding.toPx() }
         val viewportWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
+        val viewportHeight = if (constraints.hasBoundedHeight) constraints.maxHeight.toFloat() else 0f
         zoom.viewportWidth = viewportWidth
         zoom.padding = paddingPx
         zoom.pageAspect = { i -> sizes.getOrNull(i)?.let { (it.height / it.width).toFloat() } ?: 1.414f }
 
-        // Fit-width page width; the render width follows the zoom bucket.
-        val basePageWidthPx = (viewportWidth - 2 * paddingPx).toInt()
-        val renderWidthPx = if (basePageWidthPx > 0) ZoomMath.renderWidthPx(basePageWidthPx, zoom.scale) else 0
+        val basePageWidthPx = when (mode) {
+            ReadingMode.Vertical -> (viewportWidth - 2 * paddingPx).toInt()
+            ReadingMode.Horizontal -> {
+                val height = (viewportHeight - 2 * paddingPx).coerceAtLeast(1f)
+                sizes.firstOrNull()?.let { ((it.width / it.height) * height).toInt() }
+                    ?: (viewportWidth * 0.72f).toInt()
+            }
+            ReadingMode.SinglePage -> viewportWidth.toInt()
+        }
+        val renderWidthPx = if (basePageWidthPx > 0) {
+            ZoomMath.renderWidthPx(basePageWidthPx, if (zoomable) zoom.scale else 1f)
+        } else {
+            0
+        }
 
-        LaunchedEffect(manager, state, renderWidthPx) {
+        LaunchedEffect(manager, state, pageIndex, renderWidthPx, mode) {
             if (renderWidthPx <= 0) return@LaunchedEffect
             snapshotFlow {
-                val info = state.layoutInfo
-                // Skip items composed only for Compose's own prefetch (outside the viewport).
-                val visible = info.visibleItemsInfo.filter {
-                    it.offset + it.size > info.viewportStartOffset && it.offset < info.viewportEndOffset
+                when (mode) {
+                    ReadingMode.SinglePage -> {
+                        pageIndex to pageIndex
+                    }
+                    else -> {
+                        val info = state.layoutInfo
+                        val visible = info.visibleItemsInfo.filter {
+                            it.offset + it.size > info.viewportStartOffset && it.offset < info.viewportEndOffset
+                        }
+                        if (visible.isEmpty()) null else visible.first().index to visible.last().index
+                    }
                 }
-                if (visible.isEmpty()) null else visible.first().index to visible.last().index
             }
                 .distinctUntilChanged()
                 .collect { range -> range?.let { manager.setViewport(it.first, it.second, renderWidthPx) } }
         }
 
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    // Transient pinch transform; identity outside gestures.
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    scaleX = zoom.gestureScale
-                    scaleY = zoom.gestureScale
-                    translationX = zoom.gestureTranslation.x
-                    translationY = zoom.gestureTranslation.y
-                }
-                .onGloballyPositioned { layer.coordinates = it },
+        when (mode) {
+            ReadingMode.Vertical -> VerticalPageList(
+                manager = manager,
+                pageCount = pageCount,
+                state = state,
+                zoom = zoom,
+                viewportWidth = viewportWidth,
+                renderWidthPx = renderWidthPx,
+                viewport = viewport,
+                layer = layer,
+                registry = registry,
+                pageOverlays = pageOverlays,
+                selection = selection,
+                autoScroll = autoScroll,
+            )
+            ReadingMode.Horizontal -> HorizontalPageList(
+                manager = manager,
+                pageCount = pageCount,
+                state = state,
+                renderWidthPx = renderWidthPx,
+                viewport = viewport,
+                layer = layer,
+                registry = registry,
+                pageOverlays = pageOverlays,
+                selection = selection,
+                zoom = zoom,
+                autoScroll = autoScroll,
+            )
+            ReadingMode.SinglePage -> SinglePageView(
+                manager = manager,
+                pageIndex = pageIndex,
+                pageCount = pageCount,
+                renderWidthPx = renderWidthPx,
+                viewport = viewport,
+                layer = layer,
+                registry = registry,
+                pageOverlays = pageOverlays,
+                selection = selection,
+                zoom = zoom,
+                autoScroll = autoScroll,
+                onTurnPage = { delta ->
+                    val target = (pageIndex + delta).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+                    if (target != pageIndex) onPageIndexChange(target)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun VerticalPageList(
+    manager: PdfDocumentManager,
+    pageCount: Int,
+    state: LazyListState,
+    zoom: ZoomState,
+    viewportWidth: Float,
+    renderWidthPx: Int,
+    viewport: ViewportRef,
+    layer: ViewportRef,
+    registry: PageRegistry,
+    pageOverlays: List<PageOverlay>,
+    selection: SelectionState?,
+    autoScroll: (Offset) -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                transformOrigin = TransformOrigin(0f, 0f)
+                scaleX = zoom.gestureScale
+                scaleY = zoom.gestureScale
+                translationX = zoom.gestureTranslation.x
+                translationY = zoom.gestureTranslation.y
+            }
+            .onGloballyPositioned { layer.coordinates = it },
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxHeight()
+                .layout { measurable, constraints ->
+                    val width = ZoomMath.columnWidth(viewportWidth, zoom.scale).roundToInt().coerceAtLeast(1)
+                    val placeable = measurable.measure(Constraints.fixed(width, constraints.maxHeight))
+                    layout(constraints.maxWidth, constraints.maxHeight) {
+                        placeable.place(-zoom.offsetX.roundToInt(), 0)
+                    }
+                },
+            state = state,
+            contentPadding = PaddingValues(PagePadding),
+            verticalArrangement = Arrangement.spacedBy(PagePadding),
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .layout { measurable, constraints ->
-                        // Column is viewport * scale wide, shifted by offsetX.
-                        val width = ZoomMath.columnWidth(viewportWidth, zoom.scale).roundToInt().coerceAtLeast(1)
-                        val placeable = measurable.measure(Constraints.fixed(width, constraints.maxHeight))
-                        layout(constraints.maxWidth, constraints.maxHeight) {
-                            placeable.place(-zoom.offsetX.roundToInt(), 0)
+            items(count = pageCount, key = { it }) { index ->
+                PdfPageImage(
+                    manager = manager,
+                    index = index,
+                    renderWidthPx = renderWidthPx,
+                    modifier = Modifier.fillMaxWidth(),
+                    highRes = HighResContext(zoom, viewport),
+                    overlays = pageOverlays,
+                    registry = registry,
+                    gestures = if (selection != null) {
+                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll)
+                    } else {
+                        Modifier
+                    },
+                )
+            }
+        }
+        if (selection != null) SelectionHandles(selection, registry, layer, zoom, autoScroll)
+    }
+}
+
+@Composable
+private fun HorizontalPageList(
+    manager: PdfDocumentManager,
+    pageCount: Int,
+    state: LazyListState,
+    renderWidthPx: Int,
+    viewport: ViewportRef,
+    layer: ViewportRef,
+    registry: PageRegistry,
+    pageOverlays: List<PageOverlay>,
+    selection: SelectionState?,
+    zoom: ZoomState,
+    autoScroll: (Offset) -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { layer.coordinates = it },
+    ) {
+        LazyRow(
+            modifier = Modifier.fillMaxSize(),
+            state = state,
+            contentPadding = PaddingValues(PagePadding),
+            horizontalArrangement = Arrangement.spacedBy(PagePadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items(count = pageCount, key = { it }) { index ->
+                PdfPageImage(
+                    manager = manager,
+                    index = index,
+                    renderWidthPx = renderWidthPx,
+                    modifier = Modifier.fillMaxHeight(),
+                    fitHeight = true,
+                    highRes = HighResContext(zoom, viewport),
+                    overlays = pageOverlays,
+                    registry = registry,
+                    gestures = if (selection != null) {
+                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll)
+                    } else {
+                        Modifier
+                    },
+                )
+            }
+        }
+        if (selection != null) SelectionHandles(selection, registry, layer, zoom, autoScroll)
+    }
+}
+
+@Composable
+private fun SinglePageView(
+    manager: PdfDocumentManager,
+    pageIndex: Int,
+    pageCount: Int,
+    renderWidthPx: Int,
+    viewport: ViewportRef,
+    layer: ViewportRef,
+    registry: PageRegistry,
+    pageOverlays: List<PageOverlay>,
+    selection: SelectionState?,
+    zoom: ZoomState,
+    autoScroll: (Offset) -> Unit,
+    onTurnPage: (Int) -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { layer.coordinates = it }
+            .pointerInput(pageIndex, pageCount) {
+                var total = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { total = 0f },
+                    onDragEnd = {
+                        when {
+                            total < -64f -> onTurnPage(1)
+                            total > 64f -> onTurnPage(-1)
                         }
                     },
-                state = state,
-                contentPadding = PaddingValues(PagePadding),
-                verticalArrangement = Arrangement.spacedBy(PagePadding),
-            ) {
-                items(count = pageCount, key = { it }) { index ->
-                    PdfPageImage(
-                        manager = manager,
-                        index = index,
-                        renderWidthPx = renderWidthPx,
-                        modifier = Modifier.fillMaxWidth(),
-                        highRes = HighResContext(zoom, viewport),
-                        overlays = pageOverlays,
-                        registry = registry,
-                        gestures = if (selection != null) {
-                            Modifier.selectionGestures(selection, registry, index, zoom, autoScroll)
-                        } else {
-                            Modifier
-                        },
-                    )
-                }
-            }
-            if (selection != null) SelectionHandles(selection, registry, layer, zoom, autoScroll)
+                    onHorizontalDrag = { change, amount ->
+                        change.consume()
+                        total += amount
+                    },
+                )
+            },
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            PdfPageImage(
+                manager = manager,
+                index = pageIndex,
+                renderWidthPx = renderWidthPx,
+                modifier = Modifier.fillMaxWidth(),
+                highRes = HighResContext(zoom, viewport),
+                overlays = pageOverlays,
+                registry = registry,
+                gestures = if (selection != null) {
+                    Modifier.selectionGestures(selection, registry, pageIndex, zoom, autoScroll)
+                } else {
+                    Modifier
+                },
+            )
         }
+        Row(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .width(64.dp)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onTurnPage(-1) },
+            )
+            Box(Modifier.weight(1f).fillMaxHeight())
+            Box(
+                Modifier
+                    .width(64.dp)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onTurnPage(1) },
+            )
+        }
+        if (selection != null) SelectionHandles(selection, registry, layer, zoom, autoScroll)
     }
 }
 
@@ -282,6 +512,7 @@ internal fun PdfPageImage(
     index: Int,
     renderWidthPx: Int,
     modifier: Modifier = Modifier,
+    fitHeight: Boolean = false,
     highRes: HighResContext? = null,
     overlays: List<PageOverlay> = emptyList(),
     registry: PageRegistry? = null,
@@ -293,7 +524,10 @@ internal fun PdfPageImage(
 
     BoxWithConstraints(
         modifier = modifier
-            .aspectRatio((size.width / size.height).toFloat())
+            .aspectRatio(
+                (size.width / size.height).toFloat(),
+                matchHeightConstraintsFirst = fitHeight,
+            )
             .background(Color.White),
         contentAlignment = Alignment.Center,
     ) {
