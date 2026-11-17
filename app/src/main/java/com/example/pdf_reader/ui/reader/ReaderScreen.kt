@@ -24,9 +24,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.pdf_reader.R
 import com.example.pdf_reader.data.LibraryRepository
 import com.example.pdf_reader.data.ThumbnailStore
 import com.example.pdf_reader.pdfium.PdfDocumentManager
@@ -96,7 +98,7 @@ fun ReaderScreen(
                     image.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
                 }
             }
-            repository.updatePreview(hash, pageCount, file.absolutePath)
+            repository.updatePreview(hash, pageCount)
         }
     }
 
@@ -134,7 +136,7 @@ fun ReaderScreen(
             when (val current = state) {
                 ReaderState.Loading -> CircularProgressIndicator()
                 is ReaderState.Failed -> Text(
-                    text = "Cannot open: ${current.error.message}",
+                    text = stringResource(R.string.reader_cannot_open, current.error.message.orEmpty()),
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(16.dp),
                 )

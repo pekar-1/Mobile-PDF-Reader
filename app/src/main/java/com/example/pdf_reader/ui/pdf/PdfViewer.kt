@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.example.pdf_reader.R
 import com.example.pdf_reader.pdfium.NormRect
 import com.example.pdf_reader.pdfium.PdfDocumentManager
 import com.example.pdf_reader.pdfium.SearchHit
@@ -611,7 +613,7 @@ internal fun PdfPageImage(
         when (val current = state) {
             is PageImageState.Ready -> Image(
                 bitmap = current.image,
-                contentDescription = "Page ${index + 1}",
+                contentDescription = stringResource(R.string.viewer_page_description, index + 1),
                 modifier = pageModifier,
                 contentScale = ContentScale.FillBounds,
             )
@@ -619,7 +621,7 @@ internal fun PdfPageImage(
                 Text("${index + 1}", color = Color.LightGray, style = MaterialTheme.typography.headlineMedium)
             }
             is PageImageState.Failed -> Text(
-                text = "Render error: ${current.error.message}",
+                text = stringResource(R.string.viewer_render_error, current.error.message.orEmpty()),
                 color = MaterialTheme.colorScheme.error,
             )
         }

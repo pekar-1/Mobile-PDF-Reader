@@ -31,6 +31,7 @@ class LibraryActivity : ComponentActivity() {
                 val documents by viewModel.documents.collectAsStateWithLifecycle()
                 val query by viewModel.query.collectAsStateWithLifecycle()
                 val opening by viewModel.opening.collectAsStateWithLifecycle()
+                val removal by viewModel.removal.collectAsStateWithLifecycle()
 
                 val picker = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenDocument(),
@@ -70,6 +71,10 @@ class LibraryActivity : ComponentActivity() {
                         onTogglePin = viewModel::togglePinned,
                         onAddTag = viewModel::addTag,
                         onRemoveTag = viewModel::removeTag,
+                        removal = removal,
+                        onRequestRemove = viewModel::requestRemove,
+                        onConfirmRemove = viewModel::confirmRemove,
+                        onDismissRemove = viewModel::dismissRemove,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }

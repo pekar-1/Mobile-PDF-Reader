@@ -2,8 +2,10 @@ package com.example.pdf_reader.ui.library
 
 import android.app.Application
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pdf_reader.R
 import com.example.pdf_reader.data.LibraryRepository
 import com.example.pdf_reader.data.db.DocumentWithTags
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -16,6 +18,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class RemovalRequest(
+    val hash: String,
+    val displayName: String,
+    /** True when removal is offered because the file can no longer be opened. */
+    val unavailable: Boolean,
+)
+
 data class OpenDocument(
     val uri: Uri,
     val hash: String,
@@ -24,6 +33,9 @@ data class OpenDocument(
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = LibraryRepository.get(application)
+
+    private fun cannotOpenMessage(): String =
+        getApplication<Application>().getString(R.string.library_error_cannot_open_file)
 
     val query = MutableStateFlow("")
     private val _opening = MutableStateFlow(false)
@@ -35,6 +47,11 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     private val _openEvents = MutableSharedFlow<OpenDocument>(extraBufferCapacity = 1)
     val openEvents = _openEvents.asSharedFlow()
 
+    private val _removal = MutableStateFlow<RemovalRequest?>(null)
+
+    /** Document awaiting the user's confirmation to be removed from the library. */
+    val removal: StateFlow<RemovalRequest?> = _removal.asStateFlow()
+
     val documents: StateFlow<List<DocumentWithTags>> = combine(
         repo.observeDocuments(),
         query,
@@ -43,7 +60,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         if (needle.isEmpty()) all
         else all.filter { item ->
             item.document.displayName.contains(needle, ignoreCase = true) ||
-                item.tags.any { it.tag.contains(needle, ignoreCase = true) }
+                item.tags.any { it.name.contains(needle, ignoreCase = true) }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -54,7 +71,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                 val document = repo.rememberPicked(uri)
                 emitOpen(document.uri, document.hash, document.displayName)
             } catch (e: Exception) {
-                _messages.emit(e.message?.takeIf { it.isNotBlank() } ?: "Nie można otworzyć pliku")
+                _messages.emit(e.message?.takeIf { it.isNotBlank() } ?: cannotOpenMessage())
             } finally {
                 _opening.value = false
             }
@@ -62,9 +79,9 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openExisting(item: DocumentWithTags) {
-        val uri = Uri.parse(item.document.uri)
+        val uri = item.document.uri.toUri()
         if (!repo.canRead(uri)) {
-            viewModelScope.launch { _messages.emit("Nie można otworzyć pliku") }
+            _removal.value = RemovalRequest(item.document.hash, item.document.displayName, unavailable = true)
             return
         }
         viewModelScope.launch {
@@ -85,7 +102,21 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch { repo.removeTag(hash, tag) }
     }
 
+    fun requestRemove(item: DocumentWithTags) {
+        _removal.value = RemovalRequest(item.document.hash, item.document.displayName, unavailable = false)
+    }
+
+    fun dismissRemove() {
+        _removal.value = null
+    }
+
+    fun confirmRemove() {
+        val request = _removal.value ?: return
+        _removal.value = null
+        viewModelScope.launch { repo.removeDocument(request.hash) }
+    }
+
     private suspend fun emitOpen(uriString: String, hash: String, displayName: String) {
-        _openEvents.emit(OpenDocument(Uri.parse(uriString), hash, displayName))
+        _openEvents.emit(OpenDocument(uriString.toUri(), hash, displayName))
     }
 }

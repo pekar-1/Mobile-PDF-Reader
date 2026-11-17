@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import com.example.pdf_reader.data.LibraryRepository
 import com.example.pdf_reader.ui.library.OpenDocument
 import com.example.pdf_reader.ui.theme.Pdf_ReaderTheme
-import kotlinx.coroutines.runBlocking
 
 class ReaderActivity : ComponentActivity() {
     private lateinit var repository: LibraryRepository
@@ -60,7 +59,7 @@ class ReaderActivity : ComponentActivity() {
         super.onPause()
         val hash = documentHash ?: return
         val page = currentPage
-        runBlocking { repository.updateLastPage(hash, page) }
+        repository.saveLastPageAsync(hash, page)
     }
 
     companion object {

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default (English) UI strings. Polish translations live in values-pl/languages.xml. -->
+<resources>
+    <string name="app_name">PDF Reader</string>
+
+    <!-- Common actions -->
+    <string name="action_add">Add</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_remove">Remove</string>
+
+    <!-- Library -->
+    <string name="library_search_placeholder">Name or tag</string>
+    <string name="library_no_results">Nothing found</string>
+    <string name="library_pinned">Pinned</string>
+    <string name="library_recent">Recently opened</string>
+    <string name="library_open_pdf">Open PDF</string>
+    <string name="library_empty_title">No recent files</string>
+    <string name="library_empty_body">Pick a PDF from your phone\'s storage. The file stays where it is — the app only reads it.</string>
+    <string name="library_collapse">Collapse</string>
+    <string name="library_expand">Expand</string>
+    <string name="library_error_cannot_open_file">Cannot open file</string>
+    <string name="library_remove_title">Remove from library?</string>
+    <string name="library_remove_body">“%1$s” will be removed from the library. The file on your device is not deleted.</string>
+    <string name="library_file_unavailable">“%1$s” can no longer be opened. It may have been moved or deleted, or access was revoked. Remove it from the library?</string>
+
+    <!-- New tag dialog -->
+    <string name="tag_dialog_title">New tag</string>
+    <string name="tag_dialog_placeholder">e.g. exam</string>
+    <string name="tag_dialog_color">Color</string>
+    <string name="tag_dialog_saturation">Saturation</string>
+    <string name="tag_dialog_brightness">Brightness</string>
+
+    <!-- Relative time -->
+    <string name="time_just_now">just now</string>
+    <plurals name="time_minutes_ago">
+        <item quantity="one">%d min ago</item>
+        <item quantity="other">%d min ago</item>
+    </plurals>
+    <plurals name="time_hours_ago">
+        <item quantity="one">%d hour ago</item>
+        <item quantity="other">%d hours ago</item>
+    </plurals>
+    <string name="time_yesterday">yesterday</string>
+    <plurals name="time_days_ago">
+        <item quantity="one">%d day ago</item>
+        <item quantity="other">%d days ago</item>
+    </plurals>
+
+    <plurals name="page_count">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+
+    <!-- Reader -->
+    <string name="reader_cannot_open">Cannot open: %1$s</string>
+    <string name="viewer_page_description">Page %1$d</string>
+    <string name="viewer_render_error">Render error: %1$s</string>
+
+    <!-- Search -->
+    <string name="search_placeholder">Search document</string>
+    <string name="search_close">Close search</string>
+    <string name="search_whole_words">Whole words</string>
+    <string name="search_previous">Previous result</string>
+    <string name="search_next">Next result</string>
+    <string name="search_no_results">No results</string>
+</resources>

@@ -1,9 +1,11 @@
 package com.example.pdf_reader.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
@@ -15,8 +17,18 @@ data class DocumentEntity(
     val lastOpenedAt: Long,
     val lastPageIndex: Int,
     val pageCount: Int,
-    val thumbnailPath: String?,
+    /** Time the first-page thumbnail was last written; null when none exists. File path comes from ThumbnailStore. */
+    val thumbnailUpdatedAt: Long?,
     val pinned: Boolean,
+)
+
+/** Global tag. Names are case-insensitive: "Exam" and "exam" are the same tag. */
+@Entity(tableName = "tags")
+data class TagEntity(
+    @PrimaryKey
+    @ColumnInfo(collate = ColumnInfo.NOCASE)
+    val name: String,
+    val colorArgb: Int,
 )
 
 @Entity(
@@ -29,17 +41,32 @@ data class DocumentEntity(
             childColumns = ["hash"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(
+            entity = TagEntity::class,
+            parentColumns = ["name"],
+            childColumns = ["tag"],
+            onDelete = ForeignKey.CASCADE,
+            onUpdate = ForeignKey.CASCADE,
+        ),
     ],
-    indices = [Index("hash")],
+    indices = [Index("hash"), Index("tag")],
 )
-data class DocumentTagEntity(
+data class DocumentTagCrossRef(
     val hash: String,
+    @ColumnInfo(collate = ColumnInfo.NOCASE)
     val tag: String,
-    val colorArgb: Int,
 )
 
 data class DocumentWithTags(
     @Embedded val document: DocumentEntity,
-    @Relation(parentColumn = "hash", entityColumn = "hash")
-    val tags: List<DocumentTagEntity>,
+    @Relation(
+        parentColumn = "hash",
+        entityColumn = "name",
+        associateBy = Junction(
+            value = DocumentTagCrossRef::class,
+            parentColumn = "hash",
+            entityColumn = "tag",
+        ),
+    )
+    val tags: List<TagEntity>,
 )

@@ -6,14 +6,16 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [DocumentEntity::class, DocumentTagEntity::class],
-    version = 2,
-    exportSchema = false,
+    entities = [DocumentEntity::class, TagEntity::class, DocumentTagCrossRef::class],
+    version = 1,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
 
     companion object {
+        const val NAME = "pdf_reader.db"
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -22,8 +24,13 @@ abstract class AppDatabase : RoomDatabase() {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "pdf_reader.db",
-                ).build().also { instance = it }
+                    NAME,
+                )
+                    // Pre-release dev builds used schema version 2 without migrations. The schema was
+                    // reset to 1, so wipe those databases. Upgrades must ship a Migration/AutoMigration.
+                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+                    .build()
+                    .also { instance = it }
             }
         }
     }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,16 +76,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.pdf_reader.data.db.DocumentTagEntity
+import com.example.pdf_reader.R
+import com.example.pdf_reader.data.ThumbnailStore
+import com.example.pdf_reader.data.db.TagEntity
 import com.example.pdf_reader.data.db.DocumentWithTags
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 
 private val CardShape = RoundedCornerShape(14.dp)
@@ -105,6 +113,10 @@ fun LibraryScreen(
     onTogglePin: (String, Boolean) -> Unit,
     onAddTag: (String, String, Int) -> Unit,
     onRemoveTag: (String, String) -> Unit,
+    removal: RemovalRequest?,
+    onRequestRemove: (DocumentWithTags) -> Unit,
+    onConfirmRemove: () -> Unit,
+    onDismissRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -142,7 +154,7 @@ fun LibraryScreen(
                 emptyLibrary -> EmptyLibrary(Modifier.fillMaxSize())
                 noHits -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "Nic nie znaleziono",
+                        stringResource(R.string.library_no_results),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -162,7 +174,7 @@ fun LibraryScreen(
                         item(key = "pinned-block") {
                             Column {
                                 SectionHeader(
-                                    title = "Przypięte",
+                                    title = stringResource(R.string.library_pinned),
                                     expanded = pinnedExpanded,
                                     onToggle = { pinnedExpanded = !pinnedExpanded },
                                 )
@@ -177,6 +189,7 @@ fun LibraryScreen(
                                                 item = item,
                                                 nowMs = nowMs,
                                                 onOpen = { onOpenDocument(item) },
+                                                onLongPress = { onRequestRemove(item) },
                                                 onTogglePin = {
                                                     onTogglePin(
                                                         item.document.hash,
@@ -201,7 +214,7 @@ fun LibraryScreen(
                         item(key = "recent-header") {
                             if (pinned.isNotEmpty()) Spacer(Modifier.height(8.dp))
                             Text(
-                                "Ostatnio otwarte",
+                                stringResource(R.string.library_recent),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -217,6 +230,7 @@ fun LibraryScreen(
                                 item = item,
                                 nowMs = nowMs,
                                 onOpen = { onOpenDocument(item) },
+                                onLongPress = { onRequestRemove(item) },
                                 onTogglePin = {
                                     onTogglePin(
                                         item.document.hash,
@@ -262,6 +276,40 @@ fun LibraryScreen(
             },
         )
     }
+
+    if (removal != null) {
+        RemoveDocumentDialog(
+            request = removal,
+            onConfirm = onConfirmRemove,
+            onDismiss = onDismissRemove,
+        )
+    }
+}
+
+@Composable
+private fun RemoveDocumentDialog(
+    request: RemovalRequest,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.library_remove_title)) },
+        text = {
+            Text(
+                stringResource(
+                    if (request.unavailable) R.string.library_file_unavailable else R.string.library_remove_body,
+                    request.displayName,
+                ),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.action_remove)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 @Composable
@@ -287,7 +335,7 @@ private fun LibraryHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focus),
-                placeholder = { Text("Nazwa lub tag") },
+                placeholder = { Text(stringResource(R.string.library_search_placeholder)) },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 trailingIcon = {
@@ -313,7 +361,7 @@ private fun LibraryHeader(
                     Icon(Icons.Outlined.Menu, contentDescription = null)
                 }
                 Text(
-                    "PDF Reader",
+                    stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -342,7 +390,7 @@ private fun OpenPdfButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         ),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        Text("Otwórz PDF", fontWeight = FontWeight.Medium)
+        Text(stringResource(R.string.library_open_pdf), fontWeight = FontWeight.Medium)
     }
 }
 
@@ -354,13 +402,13 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "Brak ostatnich plików",
+            stringResource(R.string.library_empty_title),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Wybierz PDF z pamięci telefonu. Plik zostaje tam, gdzie jest — aplikacja tylko go czyta.",
+            stringResource(R.string.library_empty_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -385,7 +433,7 @@ private fun SectionHeader(title: String, expanded: Boolean, onToggle: () -> Unit
             modifier = Modifier.weight(1f),
         )
         Text(
-            if (expanded) "Zwiń" else "Rozwiń",
+            stringResource(if (expanded) R.string.library_collapse else R.string.library_expand),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -398,12 +446,16 @@ private fun DocumentCard(
     item: DocumentWithTags,
     nowMs: Long,
     onOpen: () -> Unit,
+    onLongPress: () -> Unit,
     onTogglePin: () -> Unit,
     onAddTag: () -> Unit,
     onRemoveTag: (String) -> Unit,
 ) {
     val doc = item.document
-    val tags = item.tags.sortedBy { it.tag.lowercase() }
+    val tags = item.tags.sortedBy { it.name.lowercase() }
+    val resources = LocalResources.current
+    val context = LocalContext.current
+    val thumbFile = remember(doc.hash) { ThumbnailStore.file(context, doc.hash) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = CardShape,
@@ -413,11 +465,12 @@ private fun DocumentCard(
         tonalElevation = 0.dp,
     ) {
         Row(
-            Modifier.clickable(onClick = onOpen),
+            Modifier.combinedClickable(onClick = onOpen, onLongClick = onLongPress),
             verticalAlignment = Alignment.Top,
         ) {
             DocumentThumb(
-                path = doc.thumbnailPath,
+                file = thumbFile,
+                version = doc.thumbnailUpdatedAt,
                 displayName = doc.displayName,
             )
             Column(
@@ -450,10 +503,11 @@ private fun DocumentCard(
                 Text(
                     "${
                         relativeOpenedAt(
+                            resources,
                             doc.lastOpenedAt,
                             nowMs
                         )
-                    }  ·  ${pageCountLabel(doc.pageCount)}",
+                    }  ·  ${pageCountLabel(resources, doc.pageCount)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 1.dp),
@@ -465,7 +519,7 @@ private fun DocumentCard(
                     itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     tags.forEach { tag ->
-                        TagChip(tag = tag, onRemove = { onRemoveTag(tag.tag) })
+                        TagChip(tag = tag, onRemove = { onRemoveTag(tag.name) })
                     }
                     AddTagButton(onClick = onAddTag)
                 }
@@ -475,7 +529,7 @@ private fun DocumentCard(
 }
 
 @Composable
-private fun TagChip(tag: DocumentTagEntity, onRemove: () -> Unit) {
+private fun TagChip(tag: TagEntity, onRemove: () -> Unit) {
     val color = Color(tag.colorArgb)
     Row(
         modifier = Modifier
@@ -488,7 +542,7 @@ private fun TagChip(tag: DocumentTagEntity, onRemove: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            tag.tag,
+            tag.name,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
             color = color,
             maxLines = 1,
@@ -531,11 +585,14 @@ private fun AddTagButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun DocumentThumb(path: String?, displayName: String) {
-    val bitmap by produceState(initialValue = null as android.graphics.Bitmap?, path) {
-        value = path
-            ?.takeIf { File(it).isFile }
-            ?.let { BitmapFactory.decodeFile(it) }
+private fun DocumentThumb(file: File, version: Long?, displayName: String) {
+    // `version` changes whenever the thumbnail is re-rendered to the same path, forcing a reload.
+    val bitmap by produceState(initialValue = null as android.graphics.Bitmap?, file, version) {
+        value = withContext(Dispatchers.IO) {
+            version
+                ?.takeIf { file.isFile }
+                ?.let { BitmapFactory.decodeFile(file.path) }
+        }
     }
     val thumbShape = RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp)
     Box(
@@ -588,18 +645,18 @@ private fun AddTagDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nowy tag") },
+        title = { Text(stringResource(R.string.tag_dialog_title)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
                     singleLine = true,
-                    placeholder = { Text("np. egzamin") },
+                    placeholder = { Text(stringResource(R.string.tag_dialog_placeholder)) },
                 )
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "Kolor",
+                    stringResource(R.string.tag_dialog_color),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -651,7 +708,7 @@ private fun AddTagDialog(
                         ),
                     )
                 }
-                Text("Nasycenie", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.tag_dialog_saturation), style = MaterialTheme.typography.labelSmall)
                 Slider(
                     value = sat,
                     onValueChange = { sat = it },
@@ -662,7 +719,7 @@ private fun AddTagDialog(
                         activeTrackColor = current
                     ),
                 )
-                Text("Jasność", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.tag_dialog_brightness), style = MaterialTheme.typography.labelSmall)
                 Slider(
                     value = valueV,
                     onValueChange = { valueV = it },
@@ -676,10 +733,10 @@ private fun AddTagDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(value, current.toArgb()) }) { Text("Dodaj") }
+            TextButton(onClick = { onConfirm(value, current.toArgb()) }) { Text(stringResource(R.string.action_add)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Anuluj") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
