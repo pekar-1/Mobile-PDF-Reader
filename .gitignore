@@ -19,3 +19,4 @@ local.properties
 
 # IDE: project display name (machine-local)
 /.idea/.name
+.idea/
