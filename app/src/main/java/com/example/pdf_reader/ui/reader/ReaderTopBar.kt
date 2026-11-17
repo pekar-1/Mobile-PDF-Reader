@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CropPortrait
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ViewAgenda
-import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,10 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.pdf_reader.R
 import com.example.pdf_reader.ui.pdf.ReadingMode
 
 @Composable
@@ -37,13 +39,17 @@ fun ReaderTopBar(
     onModeChange: (ReadingMode) -> Unit,
     searchOpen: Boolean,
     onToggleSearch: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        modifier = modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.reader_back))
+        }
         Text(
             displayName,
             style = MaterialTheme.typography.titleSmall,
@@ -96,11 +102,6 @@ private fun ReadingModeSelector(
             selected = mode == ReadingMode.Vertical,
             icon = Icons.Outlined.ViewAgenda,
             onClick = { onModeChange(ReadingMode.Vertical) },
-        )
-        ModeButton(
-            selected = mode == ReadingMode.Horizontal,
-            icon = Icons.Outlined.ViewWeek,
-            onClick = { onModeChange(ReadingMode.Horizontal) },
         )
         ModeButton(
             selected = mode == ReadingMode.SinglePage,

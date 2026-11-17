@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Polish UI strings. Keys must match values/languages.xml. -->
 <resources>
+    <!-- Menu / ustawienia -->
+    <string name="menu_open">Menu</string>
+    <string name="settings_language">Język</string>
+    <string name="language_system">Systemowy</string>
+
     <string name="app_name">PDF Reader</string>
 
     <!-- Common actions -->
@@ -63,6 +68,8 @@
     <string name="reader_cannot_open">Nie można otworzyć: %1$s</string>
     <string name="viewer_page_description">Strona %1$d</string>
     <string name="viewer_render_error">Błąd renderowania: %1$s</string>
+    <string name="viewer_no_app_for_link">Brak aplikacji do otwarcia tego linku</string>
+    <string name="reader_back">Wstecz</string>
 
     <!-- Search -->
     <string name="search_placeholder">Szukaj w dokumencie</string>

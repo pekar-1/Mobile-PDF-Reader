@@ -2,6 +2,7 @@ package com.example.pdf_reader.pdfium
 
 import android.graphics.Bitmap
 import com.example.pdf_reader.pdfium.jni.CoreNative
+import com.example.pdf_reader.pdfium.jni.LinkNative
 import com.example.pdf_reader.pdfium.jni.PageEditNative
 import com.example.pdf_reader.pdfium.jni.RenderNative
 import com.example.pdf_reader.pdfium.jni.TextNative
@@ -40,6 +41,15 @@ class PdfPage internal constructor(
     /** Maps a normalized point (0..1, origin top-left) to page space `(x, y)` in points. */
     fun normToPage(nx: Double, ny: Double): Pair<Double, Double> =
         CoreNative.nativeNormToPage(requireHandle(), nx, ny).let { it[0] to it[1] }
+
+    /** Link at normalized point; [textPage] enables plain-text URL detection. */
+    fun linkAt(nx: Double, ny: Double, textPage: PdfTextPage?): PdfLink? {
+        val (x, y) = normToPage(nx, ny)
+        val raw = LinkNative.nativeLinkAt(
+            document.requireHandle(), requireHandle(), textPage?.requireHandle() ?: 0L, x, y,
+        )
+        return PdfLink.parse(raw)
+    }
 
     /** Loads the text layer (FPDFText_LoadPage). */
     fun openTextPage(): PdfTextPage {

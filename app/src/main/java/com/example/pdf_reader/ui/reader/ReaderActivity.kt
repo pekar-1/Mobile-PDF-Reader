@@ -2,6 +2,7 @@ package com.example.pdf_reader.ui.reader
 
 import android.content.Context
 import android.content.Intent
+import com.example.pdf_reader.data.AppLanguage
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -22,6 +23,10 @@ class ReaderActivity : ComponentActivity() {
     private var documentHash: String? = null
     @Volatile
     private var currentPage: Int = 0
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +50,7 @@ class ReaderActivity : ComponentActivity() {
                         displayName = displayName.ifBlank { "PDF" },
                         repository = repository,
                         onPageChanged = { currentPage = it },
+                        onBack = ::finish,
                         modifier = Modifier
                             .padding(innerPadding)
                             .consumeWindowInsets(innerPadding)

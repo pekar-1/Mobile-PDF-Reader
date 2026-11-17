@@ -369,6 +369,12 @@ class PdfDocumentManager private constructor(
         pooled.textPage().charIndexAt(x, y, tolerancePt, tolerancePt)?.let { TextPosition(pageIndex, it) }
     }
 
+    /** Link (annotation or plain-text URL) under normalized point ([nx], [ny]) on page [pageIndex]. */
+    suspend fun linkAt(pageIndex: Int, nx: Float, ny: Float): PdfLink? = onDocumentThread {
+        val pooled = pooled(pageIndex)
+        pooled.page.linkAt(nx.toDouble(), ny.toDouble(), pooled.textPage())
+    }
+
     /**
      * Word under normalized point ([nx], [ny]) on page [pageIndex]. Falls back
      * to the single char when it is not part of a word (space, punctuation).

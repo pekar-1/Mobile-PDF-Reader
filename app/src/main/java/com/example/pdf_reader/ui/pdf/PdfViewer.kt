@@ -1,6 +1,16 @@
 package com.example.pdf_reader.ui.pdf
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import android.graphics.Rect as AndroidRect
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
+import com.example.pdf_reader.pdfium.PdfLink
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -137,6 +146,35 @@ fun PdfViewer(
         }
     }
 
+    // Internal link jumps; system back returns to the page the link was tapped on.
+    val context = LocalContext.current
+    val linkHistory = remember(manager) { mutableStateListOf<Int>() }
+    val jumpTo: (Int) -> Unit = { page ->
+        val target = page.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+        if (mode == ReadingMode.SinglePage) onPageIndexChange(target)
+        else scope.launch { state.scrollToItem(target) }
+    }
+    val onLinkTap: (Int, Float, Float) -> Unit = { page, nx, ny ->
+        scope.launch {
+            val link = try {
+                manager.linkAt(page, nx, ny)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null // Page closed or document edited meanwhile: treat as no link.
+            }
+            when (link) {
+                is PdfLink.Page -> {
+                    linkHistory += if (mode == ReadingMode.SinglePage) pageIndex else state.firstVisibleItemIndex
+                    jumpTo(link.pageIndex)
+                }
+                is PdfLink.Uri -> openExternalLink(context, link.uri)
+                null -> Unit
+            }
+        }
+    }
+    BackHandler(enabled = linkHistory.isNotEmpty()) { jumpTo(linkHistory.removeAt(linkHistory.lastIndex)) }
+
     if (selection != null) SelectionToolbar(selection, registry, state, zoom)
 
     if (search != null) {
@@ -170,18 +208,12 @@ fun PdfViewer(
     ) {
         val paddingPx = with(LocalDensity.current) { PagePadding.toPx() }
         val viewportWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
-        val viewportHeight = if (constraints.hasBoundedHeight) constraints.maxHeight.toFloat() else 0f
         zoom.viewportWidth = viewportWidth
         zoom.padding = paddingPx
         zoom.pageAspect = { i -> sizes.getOrNull(i)?.let { (it.height / it.width).toFloat() } ?: 1.414f }
 
         val basePageWidthPx = when (mode) {
             ReadingMode.Vertical -> (viewportWidth - 2 * paddingPx).toInt()
-            ReadingMode.Horizontal -> {
-                val height = (viewportHeight - 2 * paddingPx).coerceAtLeast(1f)
-                sizes.firstOrNull()?.let { ((it.width / it.height) * height).toInt() }
-                    ?: (viewportWidth * 0.72f).toInt()
-            }
             ReadingMode.SinglePage -> viewportWidth.toInt()
         }
         val renderWidthPx = if (basePageWidthPx > 0) {
@@ -224,19 +256,7 @@ fun PdfViewer(
                 pageOverlays = pageOverlays,
                 selection = selection,
                 autoScroll = autoScroll,
-            )
-            ReadingMode.Horizontal -> HorizontalPageList(
-                manager = manager,
-                pageCount = pageCount,
-                state = state,
-                renderWidthPx = renderWidthPx,
-                viewport = viewport,
-                layer = layer,
-                registry = registry,
-                pageOverlays = pageOverlays,
-                selection = selection,
-                zoom = zoom,
-                autoScroll = autoScroll,
+                onLinkTap = onLinkTap,
             )
             ReadingMode.SinglePage -> SinglePageView(
                 manager = manager,
@@ -250,6 +270,7 @@ fun PdfViewer(
                 selection = selection,
                 zoom = zoom,
                 autoScroll = autoScroll,
+                onLinkTap = onLinkTap,
                 onTurnPage = { delta ->
                     val target = (pageIndex + delta).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
                     if (target != pageIndex) onPageIndexChange(target)
@@ -273,6 +294,7 @@ private fun VerticalPageList(
     pageOverlays: List<PageOverlay>,
     selection: SelectionState?,
     autoScroll: (Offset) -> Unit,
+    onLinkTap: (Int, Float, Float) -> Unit,
 ) {
     Box(
         Modifier
@@ -310,55 +332,7 @@ private fun VerticalPageList(
                     overlays = pageOverlays,
                     registry = registry,
                     gestures = if (selection != null) {
-                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll)
-                    } else {
-                        Modifier
-                    },
-                )
-            }
-        }
-        if (selection != null) SelectionHandles(selection, registry, layer, zoom, autoScroll)
-    }
-}
-
-@Composable
-private fun HorizontalPageList(
-    manager: PdfDocumentManager,
-    pageCount: Int,
-    state: LazyListState,
-    renderWidthPx: Int,
-    viewport: ViewportRef,
-    layer: ViewportRef,
-    registry: PageRegistry,
-    pageOverlays: List<PageOverlay>,
-    selection: SelectionState?,
-    zoom: ZoomState,
-    autoScroll: (Offset) -> Unit,
-) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onGloballyPositioned { layer.coordinates = it },
-    ) {
-        LazyRow(
-            modifier = Modifier.fillMaxSize(),
-            state = state,
-            contentPadding = PaddingValues(PagePadding),
-            horizontalArrangement = Arrangement.spacedBy(PagePadding),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            items(count = pageCount, key = { it }) { index ->
-                PdfPageImage(
-                    manager = manager,
-                    index = index,
-                    renderWidthPx = renderWidthPx,
-                    modifier = Modifier.fillMaxHeight(),
-                    fitHeight = true,
-                    highRes = HighResContext(zoom, viewport),
-                    overlays = pageOverlays,
-                    registry = registry,
-                    gestures = if (selection != null) {
-                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll)
+                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll) { nx, ny -> onLinkTap(index, nx, ny) }
                     } else {
                         Modifier
                     },
@@ -382,6 +356,7 @@ private fun SinglePageView(
     selection: SelectionState?,
     zoom: ZoomState,
     autoScroll: (Offset) -> Unit,
+    onLinkTap: (Int, Float, Float) -> Unit,
     onTurnPage: (Int) -> Unit,
 ) {
     Box(
@@ -415,7 +390,7 @@ private fun SinglePageView(
                 overlays = pageOverlays,
                 registry = registry,
                 gestures = if (selection != null) {
-                    Modifier.selectionGestures(selection, registry, pageIndex, zoom, autoScroll)
+                    Modifier.selectionGestures(selection, registry, pageIndex, zoom, autoScroll) { nx, ny -> onLinkTap(pageIndex, nx, ny) }
                 } else {
                     Modifier
                 },
@@ -443,6 +418,20 @@ private fun SinglePageView(
             )
         }
         if (selection != null) SelectionHandles(selection, registry, layer, zoom, autoScroll)
+    }
+}
+
+/** Schemes safe to hand to other apps; file:, intent:, javascript: etc. are ignored. */
+private val ExternalSchemes = setOf("http", "https", "mailto", "tel")
+
+/** Opens [raw] in another app (browser, mail). The app itself has no network access. */
+private fun openExternalLink(context: Context, raw: String) {
+    val uri = (if ("://" in raw || raw.startsWith("mailto:") || raw.startsWith("tel:")) raw else "https://$raw").toUri()
+    if (uri.scheme?.lowercase() !in ExternalSchemes) return
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, context.getString(R.string.viewer_no_app_for_link), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -514,7 +503,6 @@ internal fun PdfPageImage(
     index: Int,
     renderWidthPx: Int,
     modifier: Modifier = Modifier,
-    fitHeight: Boolean = false,
     highRes: HighResContext? = null,
     overlays: List<PageOverlay> = emptyList(),
     registry: PageRegistry? = null,
@@ -526,10 +514,7 @@ internal fun PdfPageImage(
 
     BoxWithConstraints(
         modifier = modifier
-            .aspectRatio(
-                (size.width / size.height).toFloat(),
-                matchHeightConstraintsFirst = fitHeight,
-            )
+            .aspectRatio((size.width / size.height).toFloat())
             .background(Color.White),
         contentAlignment = Alignment.Center,
     ) {

@@ -16,6 +16,22 @@ object SaveFlags {
     const val REMOVE_SECURITY = 1 shl 2
 }
 
+/** Link under a point: jump inside the document or an external URI. */
+sealed interface PdfLink {
+    data class Page(val pageIndex: Int) : PdfLink
+    data class Uri(val uri: String) : PdfLink
+
+    companion object {
+        /** Parses the `"P:<index>"` / `"U:<uri>"` format of [com.example.pdf_reader.pdfium.jni.LinkNative]. */
+        internal fun parse(raw: String?): PdfLink? = when {
+            raw == null -> null
+            raw.startsWith("P:") -> raw.substring(2).toIntOrNull()?.let(::Page)
+            raw.startsWith("U:") -> raw.substring(2).takeIf { it.isNotBlank() }?.let(::Uri)
+            else -> null
+        }
+    }
+}
+
 /** Rectangle in PDF page space: points, origin bottom-left, so [top] > [bottom]. */
 data class PdfRect(val left: Double, val top: Double, val right: Double, val bottom: Double) {
     val width: Double get() = right - left

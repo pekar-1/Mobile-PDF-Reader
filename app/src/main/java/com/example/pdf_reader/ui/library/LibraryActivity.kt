@@ -1,6 +1,8 @@
 package com.example.pdf_reader.ui.library
 
+import android.content.Context
 import android.content.Intent
+import com.example.pdf_reader.data.AppLanguage
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -22,6 +24,10 @@ import com.example.pdf_reader.ui.theme.Pdf_ReaderTheme
 
 class LibraryActivity : ComponentActivity() {
     private val viewModel: LibraryViewModel by viewModels()
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +81,8 @@ class LibraryActivity : ComponentActivity() {
                         onRequestRemove = viewModel::requestRemove,
                         onConfirmRemove = viewModel::confirmRemove,
                         onDismissRemove = viewModel::dismissRemove,
+                        language = AppLanguage.get(this@LibraryActivity),
+                        onLanguageChange = { AppLanguage.set(this@LibraryActivity, it) },
                         modifier = Modifier.padding(innerPadding),
                     )
                 }

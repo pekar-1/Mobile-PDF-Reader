@@ -35,6 +35,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import com.example.pdf_reader.data.AppLanguage
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PushPin
@@ -117,6 +121,8 @@ fun LibraryScreen(
     onRequestRemove: (DocumentWithTags) -> Unit,
     onConfirmRemove: () -> Unit,
     onDismissRemove: () -> Unit,
+    language: String,
+    onLanguageChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -148,6 +154,8 @@ fun LibraryScreen(
                     searchOpen = false
                     onQueryChange("")
                 },
+                language = language,
+                onLanguageChange = onLanguageChange,
             )
 
             when {
@@ -319,6 +327,8 @@ private fun LibraryHeader(
     onQueryChange: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onCloseSearch: () -> Unit,
+    language: String,
+    onLanguageChange: (String) -> Unit,
 ) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -357,8 +367,20 @@ private fun LibraryHeader(
             LaunchedEffect(Unit) { focus.requestFocus() }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { }) {
-                    Icon(Icons.Outlined.Menu, contentDescription = null)
+                Box {
+                    var menuOpen by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Outlined.Menu, contentDescription = stringResource(R.string.menu_open))
+                    }
+                    LanguageMenu(
+                        expanded = menuOpen,
+                        current = language,
+                        onDismiss = { menuOpen = false },
+                        onSelect = {
+                            menuOpen = false
+                            onLanguageChange(it)
+                        },
+                    )
                 }
                 Text(
                     stringResource(R.string.app_name),
@@ -372,6 +394,40 @@ private fun LibraryHeader(
             }
         }
     }
+}
+
+@Composable
+private fun LanguageMenu(
+    expanded: Boolean,
+    current: String,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        Text(
+            stringResource(R.string.settings_language),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        (listOf(AppLanguage.SYSTEM) + AppLanguage.supported).forEach { tag ->
+            DropdownMenuItem(
+                text = { Text(languageLabel(tag)) },
+                onClick = { onSelect(tag) },
+                leadingIcon = {
+                    if (tag == current) Icon(Icons.Filled.Check, contentDescription = null)
+                },
+            )
+        }
+    }
+}
+
+/** Language names are shown in their own language, so they are not translated. */
+@Composable
+private fun languageLabel(tag: String): String = when (tag) {
+    "pl" -> "Polski"
+    "en" -> "English"
+    else -> stringResource(R.string.language_system)
 }
 
 @Composable
