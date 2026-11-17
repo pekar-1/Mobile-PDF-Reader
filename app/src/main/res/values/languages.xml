@@ -8,6 +8,11 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_remove">Remove</string>
 
+    <!-- Menu / settings -->
+    <string name="menu_open">Menu</string>
+    <string name="settings_language">Language</string>
+    <string name="language_system">System default</string>
+
     <!-- Library -->
     <string name="library_search_placeholder">Name or tag</string>
     <string name="library_no_results">Nothing found</string>
@@ -55,6 +60,8 @@
     <string name="reader_cannot_open">Cannot open: %1$s</string>
     <string name="viewer_page_description">Page %1$d</string>
     <string name="viewer_render_error">Render error: %1$s</string>
+    <string name="viewer_no_app_for_link">No app can open this link</string>
+    <string name="reader_back">Back</string>
 
     <!-- Search -->
     <string name="search_placeholder">Search document</string>

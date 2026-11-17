@@ -18,6 +18,7 @@ add_library(pdf_engine SHARED
     text/text_search_jni.cpp
     save/save_jni.cpp
     render/render_jni.cpp
+    link/link_jni.cpp
 )
 
 target_include_directories(pdf_engine PRIVATE

@@ -14,7 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -43,7 +45,8 @@ private val HandleSize = 24.dp
 
 /**
  * Long press selects a word, dragging on extends it (also onto other pages);
- * a tap clears the selection. Horizontal zoom panning is paused while
+ * a tap clears the selection, or else goes to [onTap] (normalized page point).
+ * Horizontal zoom panning is paused while
  * dragging, and dragging near the viewer edge scrolls via [autoScroll].
  */
 @Composable
@@ -53,8 +56,10 @@ internal fun Modifier.selectionGestures(
     pageIndex: Int,
     zoom: ZoomState,
     autoScroll: (window: Offset) -> Unit,
+    onTap: (nx: Float, ny: Float) -> Unit = { _, _ -> },
 ): Modifier {
     val haptic = LocalHapticFeedback.current
+    val tap by rememberUpdatedState(onTap) // Fresh lambda each recomposition must not restart the gesture.
     return this
         .pointerInput(selection, pageIndex) {
             fun finish() {
@@ -79,14 +84,16 @@ internal fun Modifier.selectionGestures(
                 onDragCancel = ::finish,
             )
         }
-        .pointerInput(selection) {
+        .pointerInput(selection, pageIndex) {
             // Quick tap clears the selection. Not detectTapGestures: with onLongPress it
             // consumes the rest of a long press, which would cancel the selection drag.
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val up = waitForUpOrCancellation() ?: return@awaitEachGesture // Scrolled or dragged.
                 val quick = up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
-                if (quick && selection.hasSelection) selection.clear()
+                if (!quick) return@awaitEachGesture
+                if (selection.hasSelection) selection.clear()
+                else tap(up.position.x / size.width, up.position.y / size.height)
             }
         }
 }

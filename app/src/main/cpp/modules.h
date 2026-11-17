@@ -14,5 +14,6 @@ bool registerTextPage(JNIEnv* env);   // text/text_page_jni.cpp
 bool registerTextSearch(JNIEnv* env); // text/text_search_jni.cpp
 bool registerSave(JNIEnv* env);       // save/save_jni.cpp
 bool registerRender(JNIEnv* env);     // render/render_jni.cpp
+bool registerLink(JNIEnv* env);       // link/link_jni.cpp
 
 }  // namespace pdfjni

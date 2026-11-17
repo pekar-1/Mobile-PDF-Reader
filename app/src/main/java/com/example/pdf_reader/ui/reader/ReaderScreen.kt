@@ -58,6 +58,7 @@ fun ReaderScreen(
     displayName: String,
     repository: LibraryRepository,
     onPageChanged: (Int) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -119,6 +120,7 @@ fun ReaderScreen(
             onModeChange = { readingMode = it },
             searchOpen = searchOpen,
             onToggleSearch = { searchOpen = !searchOpen },
+            onBack = onBack,
             modifier = Modifier.fillMaxWidth(),
         )
 

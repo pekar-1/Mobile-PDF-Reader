@@ -14,7 +14,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
                     pdfjni::registerTextPage(env) &&
                     pdfjni::registerTextSearch(env) &&
                     pdfjni::registerSave(env) &&
-                    pdfjni::registerRender(env);
+                    pdfjni::registerRender(env) &&
+                    pdfjni::registerLink(env);
 
     return ok ? JNI_VERSION_1_6 : JNI_ERR;
 }
