@@ -21,7 +21,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.security.MessageDigest
 
-class LibraryRepository internal constructor(
+class LibraryRepository(
     private val appContext: Context,
     private val db: AppDatabase,
 ) {
@@ -40,7 +40,7 @@ class LibraryRepository internal constructor(
     }
 
     /** Inserts a new document or refreshes uri/name/lastOpenedAt of an existing one, atomically. */
-    internal suspend fun rememberDocument(hash: String, uri: String, name: String): DocumentEntity {
+    suspend fun rememberDocument(hash: String, uri: String, name: String): DocumentEntity {
         val now = System.currentTimeMillis()
         return db.withTransaction {
             val existing = dao.get(hash)

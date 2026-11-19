@@ -58,8 +58,8 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -88,7 +88,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
-private val PagePadding = 12.dp
+private val PageGap = 8.dp
 
 /** Delay after the last scroll/zoom change before a sharp region is rendered. */
 private const val HIGH_RES_DEBOUNCE_MS = 150L
@@ -116,6 +116,8 @@ fun PdfViewer(
     search: SearchState? = null,
     selection: SelectionState? = rememberSelectionState(manager),
     overlays: List<PageOverlay> = emptyList(),
+    onTap: () -> Unit = {},
+    topInset: Dp = 0.dp,
 ) {
     val pageCount by manager.pageCount.collectAsState()
     val sizes by manager.pageSizes.collectAsState()
@@ -169,7 +171,7 @@ fun PdfViewer(
                     jumpTo(link.pageIndex)
                 }
                 is PdfLink.Uri -> openExternalLink(context, link.uri)
-                null -> Unit
+                null -> onTap()
             }
         }
     }
@@ -206,16 +208,13 @@ fun PdfViewer(
             .onGloballyPositioned { viewport.coordinates = it }
             .then(if (zoomable) Modifier.zoomGestures(zoom) else Modifier),
     ) {
-        val paddingPx = with(LocalDensity.current) { PagePadding.toPx() }
+        val paddingPx = 0f
         val viewportWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
         zoom.viewportWidth = viewportWidth
         zoom.padding = paddingPx
         zoom.pageAspect = { i -> sizes.getOrNull(i)?.let { (it.height / it.width).toFloat() } ?: 1.414f }
 
-        val basePageWidthPx = when (mode) {
-            ReadingMode.Vertical -> (viewportWidth - 2 * paddingPx).toInt()
-            ReadingMode.SinglePage -> viewportWidth.toInt()
-        }
+        val basePageWidthPx = viewportWidth.toInt()
         val renderWidthPx = if (basePageWidthPx > 0) {
             ZoomMath.renderWidthPx(basePageWidthPx, if (zoomable) zoom.scale else 1f)
         } else {
@@ -243,7 +242,7 @@ fun PdfViewer(
         }
 
         when (mode) {
-            ReadingMode.Vertical -> VerticalPageList(
+            ReadingMode.Vertical ->             VerticalPageList(
                 manager = manager,
                 pageCount = pageCount,
                 state = state,
@@ -257,6 +256,7 @@ fun PdfViewer(
                 selection = selection,
                 autoScroll = autoScroll,
                 onLinkTap = onLinkTap,
+                topInset = topInset,
             )
             ReadingMode.SinglePage -> SinglePageView(
                 manager = manager,
@@ -295,6 +295,7 @@ private fun VerticalPageList(
     selection: SelectionState?,
     autoScroll: (Offset) -> Unit,
     onLinkTap: (Int, Float, Float) -> Unit,
+    topInset: Dp,
 ) {
     Box(
         Modifier
@@ -319,8 +320,8 @@ private fun VerticalPageList(
                     }
                 },
             state = state,
-            contentPadding = PaddingValues(PagePadding),
-            verticalArrangement = Arrangement.spacedBy(PagePadding),
+            contentPadding = PaddingValues(top = topInset),
+            verticalArrangement = Arrangement.spacedBy(PageGap),
         ) {
             items(count = pageCount, key = { it }) { index ->
                 PdfPageImage(

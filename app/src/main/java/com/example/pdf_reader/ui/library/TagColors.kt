@@ -13,8 +13,6 @@ object TagColors {
         Color(0xFFC47A1A),
     )
 
-    val defaultArgb: Int = palette.first().toArgb()
-
     fun toHsv(color: Color): FloatArray {
         val hsv = FloatArray(3)
         android.graphics.Color.colorToHSV(color.toArgb(), hsv)
