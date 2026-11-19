@@ -1,11 +1,19 @@
 package com.example.pdf_reader.ui.reader
 
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -24,9 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.pdf_reader.R
 import com.example.pdf_reader.data.LibraryRepository
@@ -105,94 +115,143 @@ fun ReaderScreen(
     val search = manager?.let { rememberSearchState(it) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var readingMode by rememberSaveable { mutableStateOf(ReadingMode.Vertical) }
+    var chromeVisible by rememberSaveable { mutableStateOf(true) }
+    val density = LocalDensity.current
+    var chromeHeightPx by remember { mutableIntStateOf(0) }
     val initialPage = open?.initialPage ?: 0
     var pageIndex by remember(hash, initialPage) { mutableIntStateOf(initialPage) }
     val pageCount = manager?.pageCount?.collectAsState()?.value ?: 0
+    val chrome = chromeVisible || searchOpen
+    val topInset = with(density) { chromeHeightPx.toDp() }
 
-    Column(modifier.fillMaxSize()) {
-        ReaderTopBar(
-            displayName = displayName,
-            pageIndex = pageIndex,
-            pageCount = pageCount,
-            mode = readingMode,
-            onModeChange = { readingMode = it },
-            searchOpen = searchOpen,
-            onToggleSearch = { searchOpen = !searchOpen },
-            onBack = onBack,
-            modifier = Modifier.fillMaxWidth(),
-        )
+    fun showChrome() {
+        chromeVisible = true
+    }
 
-        if (search != null && searchOpen) {
-            PdfSearchBar(
-                search = search,
-                onClose = {
-                    search.clear()
-                    searchOpen = false
-                },
+    fun toggleChrome() {
+        if (searchOpen) return
+        chromeVisible = !chromeVisible
+    }
+
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        when (val current = state) {
+            ReaderState.Loading -> CircularProgressIndicator()
+            is ReaderState.Failed -> Text(
+                text = stringResource(R.string.reader_cannot_open, current.error.message.orEmpty()),
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(16.dp),
             )
-        }
+            is ReaderState.Open -> {
+                val goToPage = { page: Int ->
+                    pageIndex = page
+                    onPageChanged(page)
+                }
 
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            when (val current = state) {
-                ReaderState.Loading -> CircularProgressIndicator()
-                is ReaderState.Failed -> Text(
-                    text = stringResource(R.string.reader_cannot_open, current.error.message.orEmpty()),
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(16.dp),
-                )
-                is ReaderState.Open -> {
-                    val goToPage = { page: Int ->
-                        pageIndex = page
-                        onPageChanged(page)
-                    }
-
-                    if (readingMode == ReadingMode.SinglePage) {
+                if (readingMode == ReadingMode.SinglePage) {
+                    PdfViewer(
+                        current.manager,
+                        Modifier.fillMaxSize(),
+                        mode = readingMode,
+                        pageIndex = pageIndex,
+                        onPageIndexChange = goToPage,
+                        search = search,
+                        onTap = { toggleChrome() },
+                        topInset = topInset,
+                    )
+                } else {
+                    val start = pageIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+                    key(readingMode) {
+                        val listState = rememberLazyListState(
+                            initialFirstVisibleItemIndex = start,
+                        )
+                        LaunchedEffect(listState) {
+                            snapshotFlow { listState.isScrollInProgress }
+                                .distinctUntilChanged()
+                                .collect { scrolling ->
+                                    if (scrolling && !searchOpen) chromeVisible = false
+                                }
+                        }
                         PdfViewer(
                             current.manager,
                             Modifier.fillMaxSize(),
                             mode = readingMode,
+                            state = listState,
                             pageIndex = pageIndex,
                             onPageIndexChange = goToPage,
                             search = search,
+                            onTap = { toggleChrome() },
+                            topInset = topInset,
                         )
-                    } else {
-                        val start = pageIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-                        key(readingMode) {
-                            val listState = rememberLazyListState(
-                                initialFirstVisibleItemIndex = start,
-                            )
-                            PdfViewer(
-                                current.manager,
-                                Modifier.fillMaxSize(),
-                                mode = readingMode,
-                                state = listState,
-                                pageIndex = pageIndex,
-                                onPageIndexChange = goToPage,
-                                search = search,
-                            )
-                            LaunchedEffect(listState) {
-                                snapshotFlow { listState.layoutInfo.viewportEndOffset > 0 }
-                                    .first { it }
-                                if (listState.firstVisibleItemIndex != start) {
-                                    listState.scrollToItem(start)
-                                }
-                                onPageChanged(start)
-                                snapshotFlow { listState.firstVisibleItemIndex }
-                                    .distinctUntilChanged()
-                                    .collect { page ->
-                                        pageIndex = page
-                                        onPageChanged(page)
-                                    }
+                        LaunchedEffect(listState) {
+                            snapshotFlow { listState.layoutInfo.viewportEndOffset > 0 }
+                                .first { it }
+                            if (listState.firstVisibleItemIndex != start) {
+                                listState.scrollToItem(start)
                             }
+                            onPageChanged(start)
+                            snapshotFlow { listState.firstVisibleItemIndex }
+                                .distinctUntilChanged()
+                                .collect { page ->
+                                    pageIndex = page
+                                    onPageChanged(page)
+                                }
                         }
                     }
+                }
 
-                    LaunchedEffect(hash) {
-                        snapshotFlow { pageIndex }
-                            .distinctUntilChanged()
-                            .debounce(400)
-                            .collect { repository.updateLastPage(hash, it) }
-                    }
+                LaunchedEffect(hash) {
+                    snapshotFlow { pageIndex }
+                        .distinctUntilChanged()
+                        .debounce(400)
+                        .collect { repository.updateLastPage(hash, it) }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = chrome,
+            enter = fadeIn(tween(90)) + slideInVertically(tween(90)) { -it / 3 },
+            exit = fadeOut(tween(70)) + slideOutVertically(tween(70)) { -it / 3 },
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { chromeHeightPx = it.height },
+                ) {
+                    ReaderTopBar(
+                        displayName = displayName,
+                        pageIndex = pageIndex,
+                        pageCount = pageCount,
+                        mode = readingMode,
+                        onModeChange = {
+                            readingMode = it
+                            showChrome()
+                        },
+                        searchOpen = searchOpen,
+                        onToggleSearch = {
+                            searchOpen = !searchOpen
+                            if (searchOpen) showChrome()
+                        },
+                        onBack = onBack,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding(),
+                    )
+                }
+                if (search != null && searchOpen) {
+                    PdfSearchBar(
+                        search = search,
+                        onClose = {
+                            search.clear()
+                            searchOpen = false
+                        },
+                    )
                 }
             }
         }

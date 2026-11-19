@@ -8,10 +8,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import com.example.pdf_reader.data.LibraryRepository
@@ -43,7 +41,7 @@ class ReaderActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             Pdf_ReaderTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(modifier = Modifier.fillMaxSize()) {
                     ReaderScreen(
                         uri = uri,
                         hash = hash,
@@ -52,8 +50,7 @@ class ReaderActivity : ComponentActivity() {
                         onPageChanged = { currentPage = it },
                         onBack = ::finish,
                         modifier = Modifier
-                            .padding(innerPadding)
-                            .consumeWindowInsets(innerPadding)
+                            .fillMaxSize()
                             .imePadding(),
                     )
                 }
