@@ -38,7 +38,6 @@ import com.example.pdf_reader.ui.pdf.search.PdfSearchBar
 import com.example.pdf_reader.ui.pdf.search.rememberSearchState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -80,17 +79,17 @@ fun ReaderScreen(
         }
     }
 
-    val manager = (state as? ReaderState.Open)?.manager
+    val open = state as? ReaderState.Open
+    val manager = open?.manager
     DisposableEffect(manager) {
         onDispose { manager?.close() }
     }
 
-    val open = state as? ReaderState.Open
     LaunchedEffect(open?.manager, hash) {
         val current = open?.manager ?: return@LaunchedEffect
-        val pageCount = current.pageCount.value
-        repository.updatePageCount(hash, pageCount)
-        if (pageCount <= 0) return@LaunchedEffect
+        val count = current.pageCount.value
+        repository.updatePageCount(hash, count)
+        if (count <= 0) return@LaunchedEffect
         runCatching {
             val image = current.renderPage(0, ThumbnailStore.renderWidthPx)
             val file = ThumbnailStore.file(context, hash)
@@ -99,17 +98,16 @@ fun ReaderScreen(
                     image.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
                 }
             }
-            repository.updatePreview(hash, pageCount)
+            repository.updatePreview(hash, count)
         }
     }
 
     val search = manager?.let { rememberSearchState(it) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var readingMode by rememberSaveable { mutableStateOf(ReadingMode.Vertical) }
-    var pageIndex by remember(hash) { mutableIntStateOf(0) }
-
-    val emptyCount = remember { MutableStateFlow(0) }
-    val pageCount by (manager?.pageCount ?: emptyCount).collectAsState()
+    val initialPage = open?.initialPage ?: 0
+    var pageIndex by remember(hash, initialPage) { mutableIntStateOf(initialPage) }
+    val pageCount = manager?.pageCount?.collectAsState()?.value ?: 0
 
     Column(modifier.fillMaxSize()) {
         ReaderTopBar(
@@ -143,13 +141,6 @@ fun ReaderScreen(
                     modifier = Modifier.padding(16.dp),
                 )
                 is ReaderState.Open -> {
-                    val count by current.manager.pageCount.collectAsState()
-                    var seeded by remember(hash) { mutableStateOf(false) }
-                    if (!seeded) {
-                        pageIndex = current.initialPage
-                        seeded = true
-                    }
-
                     val goToPage = { page: Int ->
                         pageIndex = page
                         onPageChanged(page)
@@ -165,7 +156,7 @@ fun ReaderScreen(
                             search = search,
                         )
                     } else {
-                        val start = pageIndex.coerceIn(0, (count - 1).coerceAtLeast(0))
+                        val start = pageIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
                         key(readingMode) {
                             val listState = rememberLazyListState(
                                 initialFirstVisibleItemIndex = start,
