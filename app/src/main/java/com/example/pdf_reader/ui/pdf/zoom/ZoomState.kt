@@ -25,18 +25,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/**
- * Zoom of the page column.
- *
- * - [scale] and [offsetX] are the committed layout: the column is laid out
- *   `viewportWidth * scale` wide and shifted left by [offsetX]. Vertical
- *   position belongs to the [LazyListState].
- * - While pinching, only a transient transform ([gestureScale] around the
- *   top-left corner plus [gestureTranslation]) is drawn, without relayout.
- *   When the gesture ends it is committed in one snapshot: new scale, new
- *   offsetX and a scroll request, so the next frame shows the same content
- *   under the fingers, now laid out and rendered at the new scale.
- */
+// While pinching we only draw a scaled picture (gestureScale/gestureTranslation),
+// no relayout. After the gesture, new scale + offsetX + scroll are set at once.
 @Stable
 class ZoomState internal constructor(
     private val listState: LazyListState,
@@ -51,23 +41,19 @@ class ZoomState internal constructor(
     var gestureTranslation by mutableStateOf(Offset.Zero)
         private set
 
-    /** True while a pinch or double-tap animation is drawn as a transient transform. */
     val isTransforming: Boolean get() = gestureScale != 1f || gestureTranslation != Offset.Zero
 
-    /** Set by the viewer on every layout. */
     internal var viewportWidth = 0f
     internal var padding = 0f
 
-    /** Page aspect ratios (height / width), set by the viewer. */
+    // height / width of each page
     internal var pageAspect: (Int) -> Float = { 1.414f }
 
-    /** Suppresses horizontal panning, e.g. while a selection handle is dragged. */
+    // e.g. while dragging a selection handle
     var panEnabled = true
 
     private var flingJob: Job? = null
     private var animationJob: Job? = null
-
-    // ------------------------------------------------------------- gestures
 
     internal fun updateGesture(rawScale: Float, centroid: Offset, startCentroid: Offset) {
         val g = ZoomMath.clampScale(scale * rawScale) / scale
@@ -81,7 +67,6 @@ class ZoomState internal constructor(
         offsetX = ZoomMath.clampOffsetX(offsetX + dx, viewportWidth, scale)
     }
 
-    /** Jumps to horizontal offset [x], clamped to the column. */
     fun scrollToOffsetX(x: Float) {
         stopAnimations()
         offsetX = ZoomMath.clampOffsetX(x, viewportWidth, scale)
@@ -100,7 +85,6 @@ class ZoomState internal constructor(
         flingJob?.cancel()
     }
 
-    /** Commits the transient transform: scale, offsetX and scroll in one snapshot. */
     internal fun commitGesture(startCentroid: Offset) {
         val from = scale
         val to = ZoomMath.clampScale(from * gestureScale)
@@ -109,7 +93,6 @@ class ZoomState internal constructor(
         commit(from, to, startCentroid, focusAfter)
     }
 
-    /** Animated double-tap toggle between 1x and [ZoomMath.DOUBLE_TAP_SCALE] around [focus]. */
     internal fun toggleZoom(focus: Offset) {
         if (animationJob?.isActive == true) return
         val target = if (scale > ZoomMath.MIN_SCALE + 0.01f) ZoomMath.MIN_SCALE else ZoomMath.DOUBLE_TAP_SCALE
@@ -158,12 +141,8 @@ class ZoomState internal constructor(
 fun rememberZoomState(listState: LazyListState, scope: CoroutineScope): ZoomState =
     remember(listState, scope) { ZoomState(listState, scope) }
 
-/**
- * Pinch-to-zoom, horizontal pan with fling, and double-tap zoom for the
- * column. Runs in the Initial pass: pinches are consumed before the list can
- * scroll; single-finger moves are only observed (the list scrolls vertically,
- * this pans horizontally), so diagonal drags pan both ways at once.
- */
+// Initial pass, so pinch is handled before the list scrolls.
+// One finger: list scrolls vertically, we pan horizontally.
 fun Modifier.zoomGestures(state: ZoomState): Modifier = pointerInput(state) {
     var lastTapUptime = 0L
     var lastTapPosition = Offset.Zero

@@ -3,13 +3,9 @@ package com.example.pdf_reader.ui.pdf.selection
 import com.example.pdf_reader.pdfium.TextPosition
 import com.example.pdf_reader.pdfium.TextRange
 
-/** Pure selection logic, free of Compose and PDFium so it is unit-testable on the JVM. */
+// No Compose / PDFium here, so it can be tested on JVM.
 object SelectionMath {
 
-    /**
-     * Per-page ranges covering [start]..[endInclusive] (document order).
-     * [charCount] gives the number of chars of pages strictly between them.
-     */
     fun ranges(start: TextPosition, endInclusive: TextPosition, charCount: (Int) -> Int): List<TextRange> {
         if (endInclusive < start) return emptyList()
         return (start.pageIndex..endInclusive.pageIndex).mapNotNull { page ->
@@ -19,12 +15,7 @@ object SelectionMath {
         }
     }
 
-    /**
-     * Selection while dragging from a [fixed] range (the word of a long press,
-     * or the opposite handle) to [target]: it always keeps [fixed] and grows
-     * towards [target], so crossing over just flips the direction.
-     * Returns `(start, endInclusive)`.
-     */
+    // Keeps the fixed part (long-pressed word or other handle) and grows to target.
     fun extend(fixed: Pair<TextPosition, TextPosition>, target: TextPosition): Pair<TextPosition, TextPosition> {
         val (fixedStart, fixedEnd) = fixed
         return when {
@@ -34,7 +25,6 @@ object SelectionMath {
         }
     }
 
-    /** Inclusive positions of a non-empty [range]. */
     fun bounds(range: TextRange): Pair<TextPosition, TextPosition> =
         TextPosition(range.pageIndex, range.start) to TextPosition(range.pageIndex, range.endExclusive - 1)
 }

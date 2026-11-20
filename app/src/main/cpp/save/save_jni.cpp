@@ -1,6 +1,3 @@
-// Save module: FPDF_SaveAsCopy to a file descriptor.
-// Kotlin side: com.example.pdf_reader.pdfium.jni.SaveNative
-
 #include <jni.h>
 
 #include "common/fd_io.h"

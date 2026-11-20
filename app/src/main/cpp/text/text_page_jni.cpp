@@ -1,9 +1,4 @@
-// Text page module: FPDFText_LoadPage, FPDFText_ClosePage, FPDFText_GetText,
-// FPDFText_GetCharBox, FPDFText_GetLooseCharBox, FPDFText_GetCharIndexAtPos,
-// FPDFText_GetRect (+ CountChars/CountRects helpers).
-// All coordinates are PDF page space: points, origin at bottom-left.
-// Rect arrays are always {left, top, right, bottom}.
-// Kotlin side: com.example.pdf_reader.pdfium.jni.TextNative
+// Rects are always {left, top, right, bottom} in PDF points.
 
 #include <jni.h>
 
@@ -99,30 +94,8 @@ jint getCharIndexAtPos(JNIEnv* env, jclass, jlong textPageHandle, jdouble x,
     return FPDFText_GetCharIndexAtPos(textPage, x, y, xTolerance, yTolerance);
 }
 
-// Computes rectangles for a char range. Must precede getRect().
-jint countRects(JNIEnv* env, jclass, jlong textPageHandle, jint startIndex,
-                jint count) {
-    PDFIUM_LOCK();
-    auto textPage = requireHandle<FPDF_TEXTPAGE>(env, textPageHandle, kTextPageClosed);
-    if (textPage == nullptr) return 0;
-    return FPDFText_CountRects(textPage, startIndex, count);
-}
-
-// Returns {left, top, right, bottom} of a rect computed by the last
-// countRects() call, or null when the index is invalid.
-jdoubleArray getRect(JNIEnv* env, jclass, jlong textPageHandle, jint rectIndex) {
-    PDFIUM_LOCK();
-    auto textPage = requireHandle<FPDF_TEXTPAGE>(env, textPageHandle, kTextPageClosed);
-    if (textPage == nullptr) return nullptr;
-    double left = 0, top = 0, right = 0, bottom = 0;
-    if (!FPDFText_GetRect(textPage, rectIndex, &left, &top, &right, &bottom)) {
-        return nullptr;
-    }
-    return newRectArray(env, left, top, right, bottom);
-}
-
-// Atomic countRects + getRect under one lock. Returns a flat array
-// {l0, t0, r0, b0, l1, t1, ...}. Safe against interleaved calls.
+// CountRects + GetRect under one lock. Returns a flat array
+// {l0, t0, r0, b0, l1, t1, ...}.
 jdoubleArray getRects(JNIEnv* env, jclass, jlong textPageHandle, jint startIndex,
                       jint count) {
     PDFIUM_LOCK();
@@ -152,8 +125,6 @@ const JNINativeMethod kMethods[] = {
     {"nativeGetCharBox", "(JI)[D", reinterpret_cast<void*>(getCharBox)},
     {"nativeGetLooseCharBox", "(JI)[D", reinterpret_cast<void*>(getLooseCharBox)},
     {"nativeGetCharIndexAtPos", "(JDDDD)I", reinterpret_cast<void*>(getCharIndexAtPos)},
-    {"nativeCountRects", "(JII)I", reinterpret_cast<void*>(countRects)},
-    {"nativeGetRect", "(JI)[D", reinterpret_cast<void*>(getRect)},
     {"nativeGetRects", "(JII)[D", reinterpret_cast<void*>(getRects)},
 };
 

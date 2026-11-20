@@ -1,6 +1,3 @@
-// Page edit module: FPDFPage_Delete, FPDFPage_SetRotation.
-// Kotlin side: com.example.pdf_reader.pdfium.jni.PageEditNative
-
 #include <jni.h>
 
 #include "common/jni_utils.h"

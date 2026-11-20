@@ -17,12 +17,12 @@ data class DocumentEntity(
     val lastOpenedAt: Long,
     val lastPageIndex: Int,
     val pageCount: Int,
-    /** Time the first-page thumbnail was last written; null when none exists. File path comes from ThumbnailStore. */
+    // null = no thumbnail yet
     val thumbnailUpdatedAt: Long?,
     val pinned: Boolean,
 )
 
-/** Global tag. Names are case-insensitive: "Exam" and "exam" are the same tag. */
+// "Exam" and "exam" are the same tag.
 @Entity(tableName = "tags")
 data class TagEntity(
     @PrimaryKey

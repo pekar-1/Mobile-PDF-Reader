@@ -1,9 +1,6 @@
 package com.example.pdf_reader.pdfium.jni
 
-/**
- * Loads the native libraries and initializes PDFium once per process.
- * Call [ensureInitialized] before using any other `*Native` object.
- */
+// Call ensureInitialized() before any other *Native.
 internal object PdfiumNative {
     @Volatile
     private var initialized = false

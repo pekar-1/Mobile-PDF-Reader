@@ -90,21 +90,14 @@ import kotlin.math.roundToInt
 
 private val PageGap = 8.dp
 
-/** Delay after the last scroll/zoom change before a sharp region is rendered. */
+// Wait after scroll/zoom before rendering the sharp part.
 private const val HIGH_RES_DEBOUNCE_MS = 150L
 
-/** Viewer bounds, read by pages to find their visible part. Not Compose state on purpose. */
+// Not Compose state on purpose (no recomposition on every move).
 internal class ViewportRef {
     var coordinates: LayoutCoordinates? = null
 }
 
-/**
- * Vertical list of all pages with pinch-to-zoom (1x..5x), horizontal pan and
- * double-tap zoom. Off-screen pages abandon their renders; the manager
- * prefetches the next pages and keeps the previous ones in memory. Pages are
- * rendered at a quantized resolution ([ZoomMath.renderBucket]); when that hits
- * the bitmap limits, the visible part is rendered again at full resolution.
- */
 @Composable
 fun PdfViewer(
     manager: PdfDocumentManager,
@@ -422,10 +415,9 @@ private fun SinglePageView(
     }
 }
 
-/** Schemes safe to hand to other apps; file:, intent:, javascript: etc. are ignored. */
+// Other schemes (file:, intent:, javascript:) are ignored.
 private val ExternalSchemes = setOf("http", "https", "mailto", "tel")
 
-/** Opens [raw] in another app (browser, mail). The app itself has no network access. */
 private fun openExternalLink(context: Context, raw: String) {
     val uri = (if ("://" in raw || raw.startsWith("mailto:") || raw.startsWith("tel:")) raw else "https://$raw").toUri()
     if (uri.scheme?.lowercase() !in ExternalSchemes) return
@@ -436,16 +428,11 @@ private fun openExternalLink(context: Context, raw: String) {
     }
 }
 
-/** Top/bottom part of the viewer (fraction of its height) where selection drags auto-scroll. */
 private const val AUTO_SCROLL_EDGE = 0.08f
 
-/** Scroll pixels per pixel of finger depth into the edge zone, per drag event. */
 private const val AUTO_SCROLL_SPEED = 0.5f
 
-/**
- * Brings [hit] into view: scrolls vertically to center it unless it is fully
- * visible already, and likewise horizontally when zoomed in.
- */
+// Scrolls only if the hit is not fully visible.
 private suspend fun scrollToHit(hit: SearchHit, list: LazyListState, zoom: ZoomState) {
     if (hit.rects.isEmpty()) return
     val bounds = NormRect(
@@ -480,7 +467,6 @@ private suspend fun scrollToHit(hit: SearchHit, list: LazyListState, zoom: ZoomS
     }
 }
 
-/** What a page needs to render its visible part sharply when zoomed in. */
 internal class HighResContext(val zoom: ZoomState, val viewport: ViewportRef)
 
 private sealed interface PageImageState {
@@ -489,15 +475,9 @@ private sealed interface PageImageState {
     data class Failed(val error: Throwable) : PageImageState
 }
 
-/** Full-resolution render of [region] (page pixels at the laid-out width [pageWidthPx]). */
 private class RegionPatch(val pageWidthPx: Int, val region: AndroidRect, val image: ImageBitmap)
 
-/**
- * One page rendered at [renderWidthPx] and drawn scaled to its laid-out size.
- * Leaving composition, or a change of width or document version, cancels the
- * running request. A page already in memory shows at once; while a new
- * resolution renders, the previous image stays visible.
- */
+// While a new size renders, the old image is still shown.
 @Composable
 internal fun PdfPageImage(
     manager: PdfDocumentManager,
@@ -614,7 +594,6 @@ internal fun PdfPageImage(
     }
 }
 
-/** Part of the page visible in the viewport, in page pixels, or null when off-screen. */
 private fun visibleRegion(page: LayoutCoordinates?, viewport: LayoutCoordinates?): AndroidRect? {
     if (page == null || viewport == null || !page.isAttached || !viewport.isAttached) return null
     val bounds = page.localBoundingBoxOf(viewport, clipBounds = false)

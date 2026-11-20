@@ -29,7 +29,6 @@ interface DocumentDao {
     @Query("UPDATE documents SET lastOpenedAt = :now WHERE hash = :hash")
     suspend fun touchOpened(hash: String, now: Long)
 
-    /** Clamps to [0, pageCount - 1] when the page count is known, otherwise only to >= 0. */
     @Query(
         """
         UPDATE documents SET lastPageIndex =

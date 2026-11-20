@@ -3,25 +3,16 @@ package com.example.pdf_reader.pdfium
 import android.graphics.Bitmap
 import android.util.LruCache
 
-/** Identifies one rendered bitmap. [version] changes after every document edit. */
 internal data class RenderKey(val version: Int, val pageIndex: Int, val widthPx: Int)
 
-/**
- * Thread-safe LRU of rendered pages, bounded by bitmap bytes. Bitmaps are
- * never recycled manually: Compose may still draw an evicted one, so the GC
- * frees them once unreferenced.
- *
- * Pinned keys (the page window around the viewport) are additionally held by
- * strong references, so LRU pressure cannot drop them. Pinned bitmaps do not
- * count towards the LRU limit; the window is only a few pages.
- */
+// LRU of rendered pages. Pinned pages (around the screen) are never evicted.
+// No bitmap.recycle(), Compose may still be drawing an evicted one.
 internal class PdfBitmapCache(maxBytes: Int = defaultMaxBytes()) {
 
     private val lru = object : LruCache<RenderKey, Bitmap>(maxBytes) {
         override fun sizeOf(key: RenderKey, value: Bitmap): Int = value.allocationByteCount
     }
 
-    // Guarded by lock.
     private var pinnedKeys: Set<RenderKey> = emptySet()
     private val pinned = HashMap<RenderKey, Bitmap>()
     private val lock = Any()
@@ -36,7 +27,7 @@ internal class PdfBitmapCache(maxBytes: Int = defaultMaxBytes()) {
         }
     }
 
-    /** Replaces the pinned set. Keys not rendered yet get pinned when [put]. */
+    // Pages not rendered yet get pinned later in put().
     fun pin(keys: Set<RenderKey>) = synchronized(lock) {
         pinned.keys.retainAll(keys)
         for (key in keys) {

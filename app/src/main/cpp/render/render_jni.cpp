@@ -1,7 +1,3 @@
-// Render module: progressive, cancellable rendering of a page into an
-// Android Bitmap (FPDF_RenderPageBitmap_Start / FPDF_RenderPage_Continue).
-// Kotlin side: com.example.pdf_reader.pdfium.jni.RenderNative
-
 #include <android/bitmap.h>
 #include <jni.h>
 

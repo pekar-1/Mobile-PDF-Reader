@@ -1,8 +1,3 @@
-// Link module: hit-testing links at a page point.
-// 1. Link annotations (FPDFLink_GetLinkAtPoint): internal GoTo or URI action.
-// 2. Fallback: plain-text URLs detected by PDFium (FPDFLink_LoadWebLinks).
-// Kotlin side: com.example.pdf_reader.pdfium.jni.LinkNative
-
 #include <jni.h>
 
 #include <string>
@@ -31,6 +26,9 @@ jstring uriResult(JNIEnv* env, FPDF_DOCUMENT document, FPDF_ACTION action) {
     std::string buffer(length, '\0');
     FPDFAction_GetURIPath(document, action, buffer.data(), length);
     buffer.resize(length - 1);
+    for (const char c : buffer) {
+        if (static_cast<unsigned char>(c) >= 0x80) return nullptr;
+    }
     return env->NewStringUTF(("U:" + buffer).c_str());
 }
 
@@ -51,7 +49,7 @@ jstring annotationLink(JNIEnv* env, FPDF_DOCUMENT document, FPDF_PAGE page,
         case PDFACTION_URI:
             return uriResult(env, document, action);
         default:
-            return nullptr; //not supported offline.
+            return nullptr;
     }
 }
 

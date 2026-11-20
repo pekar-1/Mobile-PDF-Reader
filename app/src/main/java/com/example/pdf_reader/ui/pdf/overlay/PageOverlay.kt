@@ -6,16 +6,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.example.pdf_reader.pdfium.NormRect
 
-/**
- * Draws on top of one page (search hits, selection, later annotations).
- * Runs in the draw phase: Compose state read here only redraws the page,
- * without recomposition or relayout. The draw scope size is the page size.
- */
+// Draws on a page (search hits, selection). Runs in draw phase, so no recomposition.
 fun interface PageOverlay {
     fun DrawScope.drawOverlay(pageIndex: Int)
 }
 
-/** Fills a normalized rect scaled to the page size. */
 fun DrawScope.fillNormRect(rect: NormRect, color: Color) {
     drawRect(
         color = color,

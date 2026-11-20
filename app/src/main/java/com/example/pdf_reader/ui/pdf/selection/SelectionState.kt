@@ -22,15 +22,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-/**
- * Text selection: a document-ordered `start..end` (inclusive) that may span
- * pages, with its highlight rects and handle boxes.
- *
- * Gesture input arrives far faster than PDFium can hit-test, so requests go
- * through a conflated channel: one worker handles only the latest request.
- * The selection is plain char positions; [ranges] is exactly what a future
- * highlight annotation needs.
- */
+// Selection can go over many pages. Drag events come faster than PDFium can
+// handle, so they go through a conflated channel (only the newest one is used).
 @Stable
 class SelectionState internal constructor(
     private val manager: PdfDocumentManager,
@@ -41,23 +34,21 @@ class SelectionState internal constructor(
     var end by mutableStateOf<TextPosition?>(null)
         private set
 
-    /** Normalized rects per page, filled shortly after the selection changes. */
     var rectsByPage by mutableStateOf<Map<Int, List<NormRect>>>(emptyMap())
         private set
 
-    /** Loose boxes (full line height) of the first and last selected char, for handles. */
+    // Boxes of first and last char, for the handles.
     var startBox by mutableStateOf<NormRect?>(null)
         private set
     var endBox by mutableStateOf<NormRect?>(null)
         private set
 
-    /** True while a long-press drag or a handle drag is in progress. */
     var isDragging by mutableStateOf(false)
         internal set
 
     val hasSelection: Boolean get() = start != null && end != null
 
-    /** Fixed part of the selection during a drag: the long-pressed word, or the other handle. */
+    // Long-pressed word or the other handle.
     private var fixed: Pair<TextPosition, TextPosition>? = null
 
     private val requests = Channel<Request>(Channel.CONFLATED)
@@ -80,17 +71,14 @@ class SelectionState internal constructor(
         }
     }
 
-    /** Long press at a normalized point: selects the word there. */
     internal fun selectWordAt(pageIndex: Int, nx: Float, ny: Float) {
         requests.trySend(Request.Word(pageIndex, nx, ny))
     }
 
-    /** Drag after a long press, or a handle drag: grows the selection from the fixed part. */
     internal fun extendTo(pageIndex: Int, nx: Float, ny: Float) {
         requests.trySend(Request.Extend(pageIndex, nx, ny))
     }
 
-    /** Starts dragging a handle; the opposite end stays fixed. */
     internal fun beginHandleDrag(isStart: Boolean) {
         val s = start ?: return
         val e = end ?: return
@@ -102,7 +90,7 @@ class SelectionState internal constructor(
         isDragging = false
     }
 
-    /** Selects all text of the page where the selection starts. */
+    // Only the page where selection starts.
     fun selectAllOnPage() {
         val page = start?.pageIndex ?: return
         requests.trySend(Request.Page(page))
@@ -112,7 +100,6 @@ class SelectionState internal constructor(
         requests.trySend(Request.Clear)
     }
 
-    /** Per-page char ranges of the current selection. */
     suspend fun ranges(): List<TextRange> {
         val s = start ?: return emptyList()
         val e = end ?: return emptyList()
@@ -120,12 +107,10 @@ class SelectionState internal constructor(
         return SelectionMath.ranges(s, e) { counts.getValue(it) }
     }
 
-    /** Selected text; pages are joined by line breaks. PDFium's `\r\n` become `\n`. */
+    // PDFium gives \r\n, we change it to \n.
     suspend fun text(): String = manager.text(ranges()).replace("\r\n", "\n")
 
     internal fun onDocumentChanged() = clear()
-
-    // ------------------------------------------------------------------ worker
 
     private suspend fun handle(request: Request) {
         when (request) {
@@ -195,13 +180,12 @@ class SelectionState internal constructor(
     private companion object {
         const val TAG = "SelectionState"
 
-        /** Wider than a tap: while dragging, the finger hides the text and drifts between lines. */
+        // Bigger than for a tap, finger covers the text while dragging.
         const val DRAG_TOLERANCE_PT = 10.0
         val SelectionColor = Color(0x553D7BFF)
     }
 }
 
-/** Selection bound to [manager]; cleared after every document edit. */
 @Composable
 fun rememberSelectionState(manager: PdfDocumentManager): SelectionState {
     val scope = rememberCoroutineScope()

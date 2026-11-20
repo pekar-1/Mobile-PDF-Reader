@@ -1,7 +1,3 @@
-// Core module: library lifetime, opening/creating/closing documents and
-// loading pages. Provides the handles every other module works on.
-// Kotlin side: com.example.pdf_reader.pdfium.jni.CoreNative
-
 #include <jni.h>
 
 #include <algorithm>

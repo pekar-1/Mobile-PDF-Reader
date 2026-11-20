@@ -7,14 +7,12 @@ import com.example.pdf_reader.pdfium.jni.PageEditNative
 import com.example.pdf_reader.pdfium.jni.RenderNative
 import com.example.pdf_reader.pdfium.jni.TextNative
 
-/** Loaded page (FPDF_PAGE). Closing it closes all text pages opened from it. */
 class PdfPage internal constructor(
     private val document: PdfDocument,
     index: Int,
     private var handle: Long,
 ) : AutoCloseable {
 
-    /** Current index in the document; updated on delete/import. */
     var index: Int = index
         internal set
 
@@ -22,7 +20,7 @@ class PdfPage internal constructor(
 
     val isClosed: Boolean get() = handle == 0L
 
-    /** 0..3 = 0°, 90°, 180°, 270° clockwise (FPDFPage_SetRotation). */
+    // 0..3 = 0, 90, 180, 270 degrees
     var rotation: Int
         get() = CoreNative.nativeGetPageRotation(requireHandle())
         set(value) = PageEditNative.nativeSetRotation(requireHandle(), value)
@@ -30,19 +28,15 @@ class PdfPage internal constructor(
     val size: PdfSize
         get() = CoreNative.nativeGetPageSize(requireHandle()).let { PdfSize(it[0], it[1]) }
 
-    /**
-     * Maps page-space [rects] to normalized rects (0..1, origin top-left) that
-     * line up with [renderInto] output. Handles /Rotate and box offsets.
-     */
+    // PDF points -> 0..1 (top-left origin), same as the rendered bitmap.
     fun toNorm(rects: List<PdfRect>): List<NormRect> =
         if (rects.isEmpty()) emptyList()
         else CoreNative.nativePageToNormRects(requireHandle(), rects.toFlatArray()).toNormRects()
 
-    /** Maps a normalized point (0..1, origin top-left) to page space `(x, y)` in points. */
     fun normToPage(nx: Double, ny: Double): Pair<Double, Double> =
         CoreNative.nativeNormToPage(requireHandle(), nx, ny).let { it[0] to it[1] }
 
-    /** Link at normalized point; [textPage] enables plain-text URL detection. */
+    // textPage is needed to find plain-text URLs.
     fun linkAt(nx: Double, ny: Double, textPage: PdfTextPage?): PdfLink? {
         val (x, y) = normToPage(nx, ny)
         val raw = LinkNative.nativeLinkAt(
@@ -51,16 +45,12 @@ class PdfPage internal constructor(
         return PdfLink.parse(raw)
     }
 
-    /** Loads the text layer (FPDFText_LoadPage). */
     fun openTextPage(): PdfTextPage {
         val textHandle = TextNative.nativeLoadTextPage(requireHandle())
         return PdfTextPage(this, textHandle).also { openTextPages += it }
     }
 
-    /**
-     * Renders the whole page scaled to fit [bitmap] (must be ARGB_8888).
-     * Progressive: stops early once [token] is cancelled.
-     */
+    // Bitmap must be ARGB_8888.
     internal fun renderInto(
         bitmap: Bitmap,
         token: PdfRenderCancelToken,
@@ -76,11 +66,7 @@ class PdfPage internal constructor(
         }
     }
 
-    /**
-     * Renders a fragment of the page as if the whole page were
-     * [pageWidthPx] x [pageHeightPx]; the fragment's top-left corner is at
-     * ([left], [top]) in those page pixels and its size is the [bitmap] size.
-     */
+    // Renders a part of a page that is pageWidthPx x pageHeightPx big, starting at (left, top).
     internal fun renderRegionInto(
         bitmap: Bitmap,
         pageWidthPx: Int,

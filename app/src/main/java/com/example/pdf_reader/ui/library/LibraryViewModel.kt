@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 data class RemovalRequest(
     val hash: String,
     val displayName: String,
-    /** True when removal is offered because the file can no longer be opened. */
+    // File can't be opened anymore.
     val unavailable: Boolean,
 )
 
@@ -49,7 +49,6 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     private val _removal = MutableStateFlow<RemovalRequest?>(null)
 
-    /** Document awaiting the user's confirmation to be removed from the library. */
     val removal: StateFlow<RemovalRequest?> = _removal.asStateFlow()
 
     val documents: StateFlow<List<DocumentWithTags>> = combine(

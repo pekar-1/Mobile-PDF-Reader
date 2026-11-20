@@ -3,11 +3,7 @@ package com.example.pdf_reader.pdfium
 import com.example.pdf_reader.pdfium.jni.RenderNative
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Native cancellation flag polled by PDFium during progressive rendering.
- * [cancel] is thread-safe and lock-free. [close] must run after the render
- * that uses the token has returned.
- */
+// PDFium checks this flag while rendering. Close it only after the render returned.
 internal class PdfRenderCancelToken : AutoCloseable {
 
     private val closed = AtomicBoolean(false)
@@ -20,8 +16,7 @@ internal class PdfRenderCancelToken : AutoCloseable {
 
     fun cancel() {
         isCancelled = true
-        // Synchronized with close() so the native token is never freed
-        // while cancel() is writing to it.
+        // So close() can't free the token while we write to it.
         synchronized(this) {
             if (!closed.get()) RenderNative.nativeCancel(handle)
         }
@@ -34,5 +29,4 @@ internal class PdfRenderCancelToken : AutoCloseable {
     }
 }
 
-/** Outcome of [PdfPage.renderInto]. */
 internal enum class PdfRenderResult { DONE, CANCELLED, FAILED }
