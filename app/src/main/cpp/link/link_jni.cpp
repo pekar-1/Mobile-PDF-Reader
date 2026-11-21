@@ -20,16 +20,31 @@ jstring pageResult(JNIEnv* env, int pageIndex) {
     return env->NewStringUTF(("P:" + std::to_string(pageIndex)).c_str());
 }
 
+// this allows non-ASCII characters in the URL to be encoded
+std::string percentEncode(const std::string& raw) {
+    static constexpr char kHex[] = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(raw.size());
+    for (const char c : raw) {
+        const auto byte = static_cast<unsigned char>(c);
+        if (byte > 0x20 && byte < 0x7F) {
+            out += c;
+        } else {
+            out += '%';
+            out += kHex[byte >> 4];
+            out += kHex[byte & 0x0F];
+        }
+    }
+    return out;
+}
+
 jstring uriResult(JNIEnv* env, FPDF_DOCUMENT document, FPDF_ACTION action) {
     const unsigned long length = FPDFAction_GetURIPath(document, action, nullptr, 0);
     if (length <= 1) return nullptr;
     std::string buffer(length, '\0');
     FPDFAction_GetURIPath(document, action, buffer.data(), length);
     buffer.resize(length - 1);
-    for (const char c : buffer) {
-        if (static_cast<unsigned char>(c) >= 0x80) return nullptr;
-    }
-    return env->NewStringUTF(("U:" + buffer).c_str());
+    return env->NewStringUTF(("U:" + percentEncode(buffer)).c_str());
 }
 
 jstring annotationLink(JNIEnv* env, FPDF_DOCUMENT document, FPDF_PAGE page,
@@ -96,11 +111,11 @@ const JNINativeMethod kMethods[] = {
     {"nativeLinkAt", "(JJJDD)Ljava/lang/String;", reinterpret_cast<void*>(linkAt)},
 };
 
-}
+}  // namespace
 
 bool registerLink(JNIEnv* env) {
     return registerNatives(env, kClass, kMethods,
                            static_cast<int>(sizeof(kMethods) / sizeof(kMethods[0])));
 }
 
-}
+}  // namespace pdfjni

@@ -10,7 +10,9 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import com.example.pdf_reader.pdfium.PdfLink
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import com.example.pdf_reader.ui.pdf.selection.TapResolver
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -149,22 +151,32 @@ fun PdfViewer(
         if (mode == ReadingMode.SinglePage) onPageIndexChange(target)
         else scope.launch { state.scrollToItem(target) }
     }
-    val onLinkTap: (Int, Float, Float) -> Unit = { page, nx, ny ->
-        scope.launch {
-            val link = try {
+
+    // starts link lookup immediately while waiting for the double tap gesture
+    val onLinkTap: (Int, Float, Float) -> TapResolver = { page, nx, ny ->
+        val lookup = scope.async {
+            try {
                 manager.linkAt(page, nx, ny)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 null // Page closed or document edited meanwhile: treat as no link.
             }
-            when (link) {
-                is PdfLink.Page -> {
-                    linkHistory += if (mode == ReadingMode.SinglePage) pageIndex else state.firstVisibleItemIndex
-                    jumpTo(link.pageIndex)
+        }
+        TapResolver { confirmed ->
+            if (!confirmed) {
+                lookup.cancel()
+                return@TapResolver
+            }
+            scope.launch {
+                when (val link = lookup.await()) {
+                    is PdfLink.Page -> {
+                        linkHistory += if (mode == ReadingMode.SinglePage) pageIndex else state.firstVisibleItemIndex
+                        jumpTo(link.pageIndex)
+                    }
+                    is PdfLink.Uri -> openExternalLink(context, link.uri)
+                    null -> onTap()
                 }
-                is PdfLink.Uri -> openExternalLink(context, link.uri)
-                null -> onTap()
             }
         }
     }
@@ -287,7 +299,7 @@ private fun VerticalPageList(
     pageOverlays: List<PageOverlay>,
     selection: SelectionState?,
     autoScroll: (Offset) -> Unit,
-    onLinkTap: (Int, Float, Float) -> Unit,
+    onLinkTap: (Int, Float, Float) -> TapResolver,
     topInset: Dp,
 ) {
     Box(
@@ -326,7 +338,9 @@ private fun VerticalPageList(
                     overlays = pageOverlays,
                     registry = registry,
                     gestures = if (selection != null) {
-                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll) { nx, ny -> onLinkTap(index, nx, ny) }
+                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll, waitForDoubleTap = true) { nx, ny ->
+                            onLinkTap(index, nx, ny)
+                        }
                     } else {
                         Modifier
                     },
@@ -350,7 +364,7 @@ private fun SinglePageView(
     selection: SelectionState?,
     zoom: ZoomState,
     autoScroll: (Offset) -> Unit,
-    onLinkTap: (Int, Float, Float) -> Unit,
+    onLinkTap: (Int, Float, Float) -> TapResolver,
     onTurnPage: (Int) -> Unit,
 ) {
     Box(
@@ -384,7 +398,9 @@ private fun SinglePageView(
                 overlays = pageOverlays,
                 registry = registry,
                 gestures = if (selection != null) {
-                    Modifier.selectionGestures(selection, registry, pageIndex, zoom, autoScroll) { nx, ny -> onLinkTap(pageIndex, nx, ny) }
+                    Modifier.selectionGestures(selection, registry, pageIndex, zoom, autoScroll, waitForDoubleTap = false) { nx, ny ->
+                        onLinkTap(pageIndex, nx, ny)
+                    }
                 } else {
                     Modifier
                 },
@@ -415,12 +431,8 @@ private fun SinglePageView(
     }
 }
 
-// Other schemes (file:, intent:, javascript:) are ignored.
-private val ExternalSchemes = setOf("http", "https", "mailto", "tel")
-
 private fun openExternalLink(context: Context, raw: String) {
-    val uri = (if ("://" in raw || raw.startsWith("mailto:") || raw.startsWith("tel:")) raw else "https://$raw").toUri()
-    if (uri.scheme?.lowercase() !in ExternalSchemes) return
+    val uri = ExternalLinks.normalize(raw)?.toUri() ?: return
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, uri))
     } catch (_: ActivityNotFoundException) {
