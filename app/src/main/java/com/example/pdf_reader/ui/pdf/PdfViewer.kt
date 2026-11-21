@@ -12,7 +12,6 @@ import androidx.core.net.toUri
 import com.example.pdf_reader.pdfium.PdfLink
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-import com.example.pdf_reader.ui.pdf.selection.TapResolver
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +41,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -152,7 +152,7 @@ fun PdfViewer(
         else scope.launch { state.scrollToItem(target) }
     }
 
-    // starts link lookup immediately while waiting for the double tap gesture
+    // Link lookup starts while waiting for a possible double tap.
     val onLinkTap: (Int, Float, Float) -> TapResolver = { page, nx, ny ->
         val lookup = scope.async {
             try {
@@ -181,6 +181,19 @@ fun PdfViewer(
         }
     }
     BackHandler(enabled = linkHistory.isNotEmpty()) { jumpTo(linkHistory.removeAt(linkHistory.lastIndex)) }
+
+    val onViewerTap: (Offset) -> TapResolver = { local ->
+        val hit = viewport.coordinates?.takeIf { it.isAttached }?.let { registry.hitTest(it.localToWindow(local)) }
+        when {
+            selection?.hasSelection == true -> {
+                selection.clear()
+                TapResolver {}
+            }
+            hit == null -> TapResolver { confirmed -> if (confirmed) onTap() }
+            else -> onLinkTap(hit.pageIndex, hit.nx, hit.ny)
+        }
+    }
+    val currentTap by rememberUpdatedState(onViewerTap) // Gesture must not restart on recomposition.
 
     if (selection != null) SelectionToolbar(selection, registry, state, zoom)
 
@@ -211,7 +224,12 @@ fun PdfViewer(
         modifier
             .clipToBounds()
             .onGloballyPositioned { viewport.coordinates = it }
-            .then(if (zoomable) Modifier.zoomGestures(zoom) else Modifier),
+            .then(if (zoomable) Modifier.zoomGestures(zoom) else Modifier)
+            .viewerTapGestures(
+                doubleTapEnabled = zoomable,
+                onTap = { currentTap(it) },
+                onDoubleTap = { zoom.toggleZoom(it) },
+            ),
     ) {
         val paddingPx = 0f
         val viewportWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
@@ -260,7 +278,6 @@ fun PdfViewer(
                 pageOverlays = pageOverlays,
                 selection = selection,
                 autoScroll = autoScroll,
-                onLinkTap = onLinkTap,
                 topInset = topInset,
             )
             ReadingMode.SinglePage -> SinglePageView(
@@ -275,7 +292,6 @@ fun PdfViewer(
                 selection = selection,
                 zoom = zoom,
                 autoScroll = autoScroll,
-                onLinkTap = onLinkTap,
                 onTurnPage = { delta ->
                     val target = (pageIndex + delta).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
                     if (target != pageIndex) onPageIndexChange(target)
@@ -299,7 +315,6 @@ private fun VerticalPageList(
     pageOverlays: List<PageOverlay>,
     selection: SelectionState?,
     autoScroll: (Offset) -> Unit,
-    onLinkTap: (Int, Float, Float) -> TapResolver,
     topInset: Dp,
 ) {
     Box(
@@ -338,9 +353,7 @@ private fun VerticalPageList(
                     overlays = pageOverlays,
                     registry = registry,
                     gestures = if (selection != null) {
-                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll, waitForDoubleTap = true) { nx, ny ->
-                            onLinkTap(index, nx, ny)
-                        }
+                        Modifier.selectionGestures(selection, registry, index, zoom, autoScroll)
                     } else {
                         Modifier
                     },
@@ -364,7 +377,6 @@ private fun SinglePageView(
     selection: SelectionState?,
     zoom: ZoomState,
     autoScroll: (Offset) -> Unit,
-    onLinkTap: (Int, Float, Float) -> TapResolver,
     onTurnPage: (Int) -> Unit,
 ) {
     Box(
@@ -398,9 +410,7 @@ private fun SinglePageView(
                 overlays = pageOverlays,
                 registry = registry,
                 gestures = if (selection != null) {
-                    Modifier.selectionGestures(selection, registry, pageIndex, zoom, autoScroll, waitForDoubleTap = false) { nx, ny ->
-                        onLinkTap(pageIndex, nx, ny)
-                    }
+                    Modifier.selectionGestures(selection, registry, pageIndex, zoom, autoScroll)
                 } else {
                     Modifier
                 },

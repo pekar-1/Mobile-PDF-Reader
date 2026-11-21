@@ -144,8 +144,6 @@ fun rememberZoomState(listState: LazyListState, scope: CoroutineScope): ZoomStat
 // Initial pass, so pinch is handled before the list scrolls.
 // One finger: list scrolls vertically, we pan horizontally.
 fun Modifier.zoomGestures(state: ZoomState): Modifier = pointerInput(state) {
-    var lastTapUptime = 0L
-    var lastTapPosition = Offset.Zero
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         state.stopAnimations()
@@ -156,15 +154,11 @@ fun Modifier.zoomGestures(state: ZoomState): Modifier = pointerInput(state) {
         var moved = 0f
         var rawScale = 1f
         var startCentroid = Offset.Zero
-        var upTime = down.uptimeMillis
 
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             val pressed = event.changes.filter { it.pressed }
-            if (pressed.isEmpty()) {
-                upTime = event.changes.maxOf { it.uptimeMillis }
-                break
-            }
+            if (pressed.isEmpty()) break
             if (pressed.size >= 2 && !pinching) {
                 pinching = true
                 rawScale = 1f
@@ -186,20 +180,10 @@ fun Modifier.zoomGestures(state: ZoomState): Modifier = pointerInput(state) {
             }
         }
 
+        // Taps and double taps are handled by viewerTapGestures.
         when {
             pinching -> state.commitGesture(startCentroid)
             panning -> state.fling(tracker.calculateVelocity().x)
-            upTime - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis -> {
-                val isDoubleTap = down.uptimeMillis - lastTapUptime < viewConfiguration.doubleTapTimeoutMillis &&
-                    (down.position - lastTapPosition).getDistance() < slop * 4
-                if (isDoubleTap) {
-                    lastTapUptime = 0L
-                    state.toggleZoom(down.position)
-                } else {
-                    lastTapUptime = upTime
-                    lastTapPosition = down.position
-                }
-            }
         }
     }
 }

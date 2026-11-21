@@ -82,6 +82,11 @@ class SearchState internal constructor(
 
     internal fun onDocumentChanged() = restart(debounce = false)
 
+    // Restarts the search after every edit. Never returns.
+    internal suspend fun followDocumentChanges() {
+        manager.version.drop(1).collect { onDocumentChanged() }
+    }
+
     private fun navigate(index: Int) {
         if (index < 0) return
         currentIndex = index
@@ -133,8 +138,6 @@ class SearchState internal constructor(
 fun rememberSearchState(manager: PdfDocumentManager): SearchState {
     val scope = rememberCoroutineScope()
     val state = remember(manager, scope) { SearchState(manager, scope) }
-    LaunchedEffect(state) {
-        manager.version.drop(1).collect { state.onDocumentChanged() }
-    }
+    LaunchedEffect(state) { state.followDocumentChanges() }
     return state
 }

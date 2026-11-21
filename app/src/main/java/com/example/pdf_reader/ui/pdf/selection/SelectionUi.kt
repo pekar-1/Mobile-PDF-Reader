@@ -3,9 +3,6 @@ package com.example.pdf_reader.ui.pdf.selection
 import android.content.ClipData
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -14,9 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -43,11 +38,7 @@ import kotlin.math.roundToInt
 
 private val HandleSize = 24.dp
 
-internal fun interface TapResolver {
-    fun resolve(confirmed: Boolean)
-}
-
-// Long press = select word, drag = extend. Tap clears selection or calls onTap.
+// Long press = select word, drag = extend. Taps are in viewerTapGestures.
 @Composable
 internal fun Modifier.selectionGestures(
     selection: SelectionState,
@@ -55,11 +46,8 @@ internal fun Modifier.selectionGestures(
     pageIndex: Int,
     zoom: ZoomState,
     autoScroll: (window: Offset) -> Unit,
-    waitForDoubleTap: Boolean,
-    onTap: (nx: Float, ny: Float) -> TapResolver = { _, _ -> TapResolver {} },
 ): Modifier {
     val haptic = LocalHapticFeedback.current
-    val tap by rememberUpdatedState(onTap) // Fresh lambda each recomposition must not restart the gesture.
     return this
         .pointerInput(selection, pageIndex) {
             fun finish() {
@@ -83,36 +71,6 @@ internal fun Modifier.selectionGestures(
                 onDragEnd = ::finish,
                 onDragCancel = ::finish,
             )
-        }
-        .pointerInput(selection, pageIndex, waitForDoubleTap) {
-            // Not detectTapGestures, because with onLongPress it eats the drag after long press.
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                val up = waitForUpOrCancellation() ?: return@awaitEachGesture // Scrolled or dragged.
-                val quick = up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
-                if (!quick) return@awaitEachGesture
-                if (selection.hasSelection) {
-                    selection.clear()
-                    return@awaitEachGesture
-                }
-                val resolver = tap(up.position.x / size.width, up.position.y / size.height)
-                if (!waitForDoubleTap) {
-                    resolver.resolve(true)
-                    return@awaitEachGesture
-                }
-                val second = withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
-                    awaitFirstDown(requireUnconsumed = false)
-                }
-                val isDoubleTap = second != null &&
-                    (second.position - down.position).getDistance() < viewConfiguration.touchSlop * 4
-                resolver.resolve(!isDoubleTap)
-                if (second == null) return@awaitEachGesture
-                val secondUp = waitForUpOrCancellation() ?: return@awaitEachGesture
-                if (isDoubleTap) return@awaitEachGesture
-                if (secondUp.uptimeMillis - second.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
-                    tap(secondUp.position.x / size.width, secondUp.position.y / size.height).resolve(true)
-                }
-            }
         }
 }
 

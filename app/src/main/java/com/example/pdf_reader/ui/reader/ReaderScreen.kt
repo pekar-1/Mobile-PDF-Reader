@@ -1,6 +1,5 @@
 package com.example.pdf_reader.ui.reader
 
-import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -19,7 +18,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,94 +30,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.pdf_reader.R
-import com.example.pdf_reader.data.LibraryRepository
-import com.example.pdf_reader.data.ThumbnailStore
-import com.example.pdf_reader.pdfium.PdfDocumentManager
 import com.example.pdf_reader.ui.pdf.PdfViewer
 import com.example.pdf_reader.ui.pdf.ReadingMode
 import com.example.pdf_reader.ui.pdf.search.PdfSearchBar
-import com.example.pdf_reader.ui.pdf.search.rememberSearchState
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import java.io.FileOutputStream
-
-private sealed interface ReaderState {
-    data object Loading : ReaderState
-    data class Open(val manager: PdfDocumentManager, val initialPage: Int) : ReaderState
-    data class Failed(val error: Throwable) : ReaderState
-}
 
 @Composable
-fun ReaderScreen(
-    uri: Uri,
-    hash: String,
+internal fun ReaderScreen(
+    viewModel: ReaderViewModel,
     displayName: String,
-    repository: LibraryRepository,
-    onPageChanged: (Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    var state by remember { mutableStateOf<ReaderState>(ReaderState.Loading) }
-
-    LaunchedEffect(uri, hash) {
-        state = ReaderState.Loading
-        state = try {
-            val manager = PdfDocumentManager.open(context, uri)
-            val stored = repository.get(hash)
-            val pageCount = manager.pageCount.value
-            val initial = stored?.lastPageIndex?.coerceIn(0, (pageCount - 1).coerceAtLeast(0)) ?: 0
-            onPageChanged(initial)
-            ReaderState.Open(manager, initial)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            ReaderState.Failed(e)
-        }
-    }
-
+    val state by viewModel.state.collectAsState()
+    val pageIndex by viewModel.pageIndex.collectAsState()
     val open = state as? ReaderState.Open
     val manager = open?.manager
-    DisposableEffect(manager) {
-        onDispose { manager?.close() }
-    }
-
-    LaunchedEffect(open?.manager, hash) {
-        val current = open?.manager ?: return@LaunchedEffect
-        val count = current.pageCount.value
-        repository.updatePageCount(hash, count)
-        if (count <= 0) return@LaunchedEffect
-        runCatching {
-            val image = current.renderPage(0, ThumbnailStore.renderWidthPx)
-            val file = ThumbnailStore.file(context, hash)
-            withContext(Dispatchers.IO) {
-                FileOutputStream(file).use { out ->
-                    image.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
-                }
-            }
-            repository.updatePreview(hash, count)
-        }
-    }
-
-    val search = manager?.let { rememberSearchState(it) }
+    val search = open?.search
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var readingMode by rememberSaveable { mutableStateOf(ReadingMode.Vertical) }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
     val density = LocalDensity.current
     var chromeHeightPx by remember { mutableIntStateOf(0) }
-    val initialPage = open?.initialPage ?: 0
-    var pageIndex by remember(hash, initialPage) { mutableIntStateOf(initialPage) }
     val pageCount = manager?.pageCount?.collectAsState()?.value ?: 0
     val chrome = chromeVisible || searchOpen
     val topInset = with(density) { chromeHeightPx.toDp() }
@@ -142,10 +80,7 @@ fun ReaderScreen(
                 modifier = Modifier.padding(16.dp),
             )
             is ReaderState.Open -> {
-                val goToPage = { page: Int ->
-                    pageIndex = page
-                    onPageChanged(page)
-                }
+                val goToPage = viewModel::onPageChanged
 
                 if (readingMode == ReadingMode.SinglePage) {
                     PdfViewer(
@@ -188,22 +123,12 @@ fun ReaderScreen(
                             if (listState.firstVisibleItemIndex != start) {
                                 listState.scrollToItem(start)
                             }
-                            onPageChanged(start)
+                            goToPage(start)
                             snapshotFlow { listState.firstVisibleItemIndex }
                                 .distinctUntilChanged()
-                                .collect { page ->
-                                    pageIndex = page
-                                    onPageChanged(page)
-                                }
+                                .collect { goToPage(it) }
                         }
                     }
-                }
-
-                LaunchedEffect(hash) {
-                    snapshotFlow { pageIndex }
-                        .distinctUntilChanged()
-                        .debounce(400)
-                        .collect { repository.updateLastPage(hash, it) }
                 }
             }
         }

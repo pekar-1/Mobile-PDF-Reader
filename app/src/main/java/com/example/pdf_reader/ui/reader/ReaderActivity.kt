@@ -2,8 +2,6 @@ package com.example.pdf_reader.ui.reader
 
 import android.content.Context
 import android.content.Intent
-import com.example.pdf_reader.data.AppLanguage
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.ViewModelProvider
+import com.example.pdf_reader.data.AppLanguage
 import com.example.pdf_reader.data.LibraryRepository
 import com.example.pdf_reader.ui.library.OpenDocument
 import com.example.pdf_reader.ui.theme.Pdf_ReaderTheme
@@ -19,8 +19,9 @@ import com.example.pdf_reader.ui.theme.Pdf_ReaderTheme
 class ReaderActivity : ComponentActivity() {
     private lateinit var repository: LibraryRepository
     private var documentHash: String? = null
-    @Volatile
-    private var currentPage: Int = 0
+
+    internal var viewModel: ReaderViewModel? = null
+        private set
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
@@ -37,17 +38,16 @@ class ReaderActivity : ComponentActivity() {
             return
         }
         documentHash = hash
+        val model = ViewModelProvider(this, ReaderViewModel.factory(uri, hash))[ReaderViewModel::class.java]
+        viewModel = model
 
         enableEdgeToEdge()
         setContent {
             Pdf_ReaderTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) {
                     ReaderScreen(
-                        uri = uri,
-                        hash = hash,
+                        viewModel = model,
                         displayName = displayName.ifBlank { "PDF" },
-                        repository = repository,
-                        onPageChanged = { currentPage = it },
                         onBack = ::finish,
                         modifier = Modifier
                             .fillMaxSize()
@@ -61,8 +61,8 @@ class ReaderActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         val hash = documentHash ?: return
-        val page = currentPage
-        repository.saveLastPageAsync(hash, page)
+        val model = viewModel ?: return
+        if (model.state.value is ReaderState.Open) repository.saveLastPageAsync(hash, model.pageIndex.value)
     }
 
     companion object {
@@ -72,7 +72,6 @@ class ReaderActivity : ComponentActivity() {
         fun intent(context: Context, target: OpenDocument): Intent {
             return Intent(context, ReaderActivity::class.java).apply {
                 data = target.uri
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 putExtra(EXTRA_HASH, target.hash)
                 putExtra(EXTRA_DISPLAY_NAME, target.displayName)
             }
