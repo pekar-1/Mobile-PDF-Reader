@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import com.example.pdf_reader.R
 import com.example.pdf_reader.pdfium.SearchFlags
 
-/** Search field, hit counter, next/prev and match options. Focuses the field when shown. */
 @Composable
 fun PdfSearchBar(search: SearchState, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val focus = remember { FocusRequester() }

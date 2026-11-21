@@ -45,23 +45,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Owns one PDF document and is the only entry point the UI should use.
- *
- * Threading: every PDFium call runs on a private single-thread dispatcher
- * ("document thread"), so file access is strictly sequential and in FIFO
- * order. All public functions are `suspend` and safe to call from any thread.
- *
- * Rendering returns [ImageBitmap] for Compose. Abandoned renders are dropped:
- * - still queued: skipped without allocating a bitmap,
- * - already running: PDFium is told to stop via a native cancel token,
- * - shared: identical requests share one render, which is cancelled only
- *   when no caller waits for it anymore.
- *
- * Page window: [setViewport] prefetches the next pages in the background
- * (only while no visible render is pending) and pins the previous ones in
- * memory, so scrolling either way shows ready bitmaps.
- *
- * Call [close] when done (e.g. from `DisposableEffect.onDispose`).
+ * Owns one open PDF. All PDFium calls run on one private thread, so they
+ * never overlap. Same render requests share one render. Call [close] when done.
  */
 class PdfDocumentManager private constructor(
     private val document: PdfDocument,
@@ -79,20 +64,17 @@ class PdfDocumentManager private constructor(
     private val inFlight = HashMap<RenderKey, InFlightRender>()
     private val inFlightLock = Any()
 
-    /** Number of in-flight renders a visible page waits for. Prefetch runs only at 0. */
+    // Prefetch waits until this is 0 (visible pages go first).
     private val visibleDemand = MutableStateFlow(0)
 
     @Volatile
     private var viewport: Viewport? = null
 
-    // Guarded by prefetchLock.
     private val prefetchJobs = HashMap<RenderKey, Job>()
     private val prefetchLock = Any()
 
-    /** One prefetch at a time, in launch order (Mutex is fair). */
     private val prefetchMutex = Mutex()
 
-    // Document thread only.
     private val pagePool = object : LinkedHashMap<Int, PooledPage>(8, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, PooledPage>): Boolean {
             if (size <= PAGE_POOL_SIZE) return false
@@ -107,22 +89,16 @@ class PdfDocumentManager private constructor(
 
     val pageCount: StateFlow<Int> = _pageCount.asStateFlow()
 
-    /** Page sizes in PDF points (rotation applied), for layout before rendering. */
+    // In PDF points, rotation applied.
     val pageSizes: StateFlow<List<PdfSize>> = _pageSizes.asStateFlow()
 
-    /** Incremented after every edit; rendered bitmaps of older versions are stale. */
+    // +1 after every edit, old bitmaps are stale then.
     val version: StateFlow<Int> = _version.asStateFlow()
 
     val isClosed: Boolean get() = closed.get()
 
     internal val stats = RenderStats()
 
-    // ---------------------------------------------------------------- render
-
-    /**
-     * Renders page [index] at [widthPx] wide (height from the page aspect
-     * ratio). Cancelling the calling coroutine abandons the render.
-     */
     suspend fun renderPage(index: Int, widthPx: Int): ImageBitmap =
         renderBitmap(index, widthPx).asImageBitmap()
 
@@ -136,25 +112,18 @@ class PdfDocumentManager private constructor(
                 return it
             }
             awaitShared(key)?.let { return it }
-            // null: an edit made the request stale before it ran; retry.
+            // null = page was edited before render started, try again
         }
         throw CancellationException("Document keeps changing; render abandoned")
     }
 
-    /**
-     * `true` when a full render of page [index] at [widthPx] is downscaled by
-     * the bitmap limits, so zoomed-in views need [renderRegion] to stay sharp.
-     */
+    // True when full page bitmap would be too big and gets downscaled.
     fun isRenderCapped(index: Int, widthPx: Int): Boolean {
         val size = _pageSizes.value.getOrNull(index) ?: return false
         return bitmapSize(widthPx, size).first < widthPx
     }
 
-    /**
-     * Renders only [region] of page [index], laid out [pageWidthPx] wide, at
-     * full resolution (for zoom beyond the full-page bitmap limits). Not
-     * cached. Cancelling the caller stops the native render.
-     */
+    // Renders only part of the page, used for big zoom. Not cached.
     suspend fun renderRegion(index: Int, pageWidthPx: Int, region: android.graphics.Rect): ImageBitmap {
         require(pageWidthPx > 0) { "pageWidthPx must be > 0" }
         require(!region.isEmpty) { "region must not be empty" }
@@ -173,8 +142,7 @@ class PdfDocumentManager private constructor(
                     }
                 }
                 try {
-                    // withContext returns only after the block has finished,
-                    // so closing the token afterwards is safe.
+                    // withContext waits for the block to finish, so closing token later is ok
                     onDocumentThread {
                         val size = _pageSizes.value.getOrNull(index)
                             ?: throw IllegalArgumentException("Page index $index out of range")
@@ -200,20 +168,12 @@ class PdfDocumentManager private constructor(
         }
     }
 
-    /** Cached bitmap of page [index] at [widthPx] for the current version, without queueing. */
     fun cachedPage(index: Int, widthPx: Int): ImageBitmap? {
         if (closed.get()) return null
         return cache[RenderKey(_version.value, index, widthPx)]?.asImageBitmap()
     }
 
-    // --------------------------------------------------------------- viewport
-
-    /**
-     * Reports the visible pages [firstVisible]..[lastVisible] rendered at
-     * [widthPx]. The next [PREFETCH_AHEAD] pages are rendered in the background
-     * (after visible renders), and the previous [KEEP_BEHIND] pages stay in
-     * memory if already rendered. Safe from any thread; ignored after [close].
-     */
+    // Called on scroll. Prefetches next pages and keeps previous ones in cache.
     fun setViewport(firstVisible: Int, lastVisible: Int, widthPx: Int) {
         require(widthPx > 0) { "widthPx must be > 0" }
         if (closed.get()) return
@@ -237,7 +197,6 @@ class PdfDocumentManager private constructor(
             else (maxOf(first - KEEP_BEHIND, 0)..minOf(last + PREFETCH_AHEAD, count - 1)).mapTo(HashSet(), ::key)
             cache.pin(window)
 
-            // Keep prefetches still inside the window; their renders go on.
             val iterator = prefetchJobs.entries.iterator()
             while (iterator.hasNext()) {
                 val (key, job) = iterator.next()
@@ -299,7 +258,6 @@ class PdfDocumentManager private constructor(
         }
     }
 
-    // Called under inFlightLock.
     private fun startRender(key: RenderKey): InFlightRender {
         val token = PdfRenderCancelToken()
         val entry = InFlightRender(token)
@@ -313,7 +271,7 @@ class PdfDocumentManager private constructor(
         return entry
     }
 
-    /** Runs on the document thread. Returns null when the request is stale. */
+    // Returns null when request is stale (page was edited).
     private fun CoroutineScope.renderOnDocumentThread(key: RenderKey, entry: InFlightRender): Bitmap? {
         ensureActive()
         ensureOpen()
@@ -345,19 +303,11 @@ class PdfDocumentManager private constructor(
         }
     }
 
-    // ------------------------------------------------------------ text/search
-
-    /** Whole text of page [index]. */
     suspend fun text(index: Int): String = onDocumentThread { pooled(index).text() }
 
-    /** All matches of [query] on page [index]. [flags]: see [SearchFlags]. */
     suspend fun search(index: Int, query: String, flags: Int = SearchFlags.NONE): List<PdfSearchMatch> =
         onDocumentThread { pooled(index).textPage().findAll(query, flags) }
 
-    /**
-     * Char under normalized point ([nx], [ny]) on page [pageIndex], or `null`
-     * when no char is within [tolerancePt] points.
-     */
     suspend fun charAt(
         pageIndex: Int,
         nx: Float,
@@ -369,16 +319,12 @@ class PdfDocumentManager private constructor(
         pooled.textPage().charIndexAt(x, y, tolerancePt, tolerancePt)?.let { TextPosition(pageIndex, it) }
     }
 
-    /** Link (annotation or plain-text URL) under normalized point ([nx], [ny]) on page [pageIndex]. */
     suspend fun linkAt(pageIndex: Int, nx: Float, ny: Float): PdfLink? = onDocumentThread {
         val pooled = pooled(pageIndex)
         pooled.page.linkAt(nx.toDouble(), ny.toDouble(), pooled.textPage())
     }
 
-    /**
-     * Word under normalized point ([nx], [ny]) on page [pageIndex]. Falls back
-     * to the single char when it is not part of a word (space, punctuation).
-     */
+    // If the char is not in a word (space, dot) returns just that char.
     suspend fun wordAt(
         pageIndex: Int,
         nx: Float,
@@ -391,27 +337,21 @@ class PdfDocumentManager private constructor(
         TextBoundaries.wordAround(pooled.text(), index)?.let { (start, end) -> TextRange(pageIndex, start, end) }
     }
 
-    /** Number of chars on page [pageIndex] (includes generated line breaks). */
     suspend fun charCount(pageIndex: Int): Int = onDocumentThread { pooled(pageIndex).textPage().charCount }
 
-    /** Normalized rectangles covering [range], one per text run. */
     suspend fun rects(range: TextRange): List<NormRect> = onDocumentThread {
         if (range.isEmpty) return@onDocumentThread emptyList()
         val pooled = pooled(range.pageIndex)
         pooled.page.toNorm(pooled.textPage().rects(range.start, range.count))
     }
 
-    /**
-     * Normalized loose box of one char (stable line height), e.g. for
-     * selection handles, or `null` for an invalid position.
-     */
     suspend fun charBox(position: TextPosition): NormRect? = onDocumentThread {
         val pooled = pooled(position.pageIndex)
         val box = pooled.textPage().looseCharBox(position.charIndex) ?: return@onDocumentThread null
         pooled.page.toNorm(listOf(box)).firstOrNull()
     }
 
-    /** Text of [ranges] in order; ranges on different pages are joined by a line break. */
+    // Ranges from different pages are joined with a new line.
     suspend fun text(ranges: List<TextRange>): String = onDocumentThread {
         buildString {
             var lastPage = -1
@@ -424,13 +364,8 @@ class PdfDocumentManager private constructor(
         }
     }
 
-    /**
-     * Searches the whole document, page by page, starting at [startPage] and
-     * wrapping around. Emits one [PageSearchResult] per scanned page (also
-     * without hits, for progress). Each page is a separate document-thread
-     * task, so renders keep running in between. Collection stops early when
-     * the document is edited, since hits of an older version are stale.
-     */
+    // Searches page by page from startPage (one task per page, so renders
+    // can run in between). Emits every page, also empty ones, for progress.
     fun searchDocument(query: String, flags: Int = SearchFlags.NONE, startPage: Int = 0): Flow<PageSearchResult> =
         flow {
             require(query.isNotEmpty()) { "Query must not be empty" }
@@ -451,9 +386,7 @@ class PdfDocumentManager private constructor(
             }
         }
 
-    // ------------------------------------------------------------------ edits
-
-    /** [rotation]: 0..3 = 0°, 90°, 180°, 270° clockwise. */
+    // rotation: 0..3 = 0, 90, 180, 270 degrees
     suspend fun setRotation(index: Int, rotation: Int) = edit {
         pooledPage(index).rotation = rotation
     }
@@ -463,10 +396,7 @@ class PdfDocumentManager private constructor(
         document.deletePage(index)
     }
 
-    /**
-     * Copies pages from [source] (1-based [pageRange], `null` = all) at
-     * [insertIndex]. Keep [source] open until this document is saved.
-     */
+    // pageRange is 1-based, null = all pages. Keep source open until save.
     suspend fun importPages(source: PdfDocumentManager, pageRange: String? = null, insertIndex: Int? = null) {
         require(source !== this) { "Cannot import from the same document" }
         source.ensureOpen()
@@ -482,19 +412,13 @@ class PdfDocumentManager private constructor(
         document.saveTo(file, flags)
     }
 
-    /** Saves to a writable [uri] (e.g. from `CreateDocument`). The target is truncated. */
     suspend fun saveTo(context: Context, uri: Uri, flags: Int = SaveFlags.NONE) = onDocumentThread {
         val output = context.contentResolver.openFileDescriptor(uri, "wt")
             ?: throw FileNotFoundException("Cannot open $uri for writing")
         output.use { document.saveTo(it, flags) }
     }
 
-    // -------------------------------------------------------------- lifecycle
-
-    /**
-     * Abandons all renders and closes the document on its thread. Safe to call
-     * from any thread, more than once. Later calls throw IllegalStateException.
-     */
+    // Safe to call more than once, from any thread.
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         synchronized(inFlightLock) {
@@ -506,8 +430,7 @@ class PdfDocumentManager private constructor(
             prefetchJobs.clear()
         }
         scope.cancel()
-        // Queued after every task submitted so far: nothing touches the
-        // document after this runs (queued tasks see `closed` and bail out).
+        // Runs after all queued tasks, so nothing uses the document after this.
         executor.execute {
             closePooledPages()
             document.close()
@@ -516,8 +439,6 @@ class PdfDocumentManager private constructor(
         }
         executor.shutdown()
     }
-
-    // ---------------------------------------------------------------- helpers
 
     private suspend fun <T> onDocumentThread(block: () -> T): T {
         ensureOpen()
@@ -532,7 +453,7 @@ class PdfDocumentManager private constructor(
         refreshState()
     }
 
-    /** Document thread only. Re-reads page metadata and invalidates renders. */
+    // Re-reads page sizes after an edit, old renders are dropped.
     private fun refreshState() {
         checkDocumentThread()
         val count = document.pageCount
@@ -567,10 +488,7 @@ class PdfDocumentManager private constructor(
         }
     }
 
-    /**
-     * Pooled page with its lazily loaded text layer and text. Document thread
-     * only. Closing the page also closes the text page (see [PdfPage.close]).
-     */
+    // Open page + its text layer, loaded when first needed.
     private class PooledPage(val page: PdfPage) {
         private var textPage: PdfTextPage? = null
         private var text: String? = null
@@ -591,8 +509,8 @@ class PdfDocumentManager private constructor(
 
     private class InFlightRender(val token: PdfRenderCancelToken) {
         lateinit var deferred: Deferred<Bitmap?>
-        var waiters = 0 // Guarded by inFlightLock.
-        var priorityWaiters = 0 // Non-prefetch waiters; guarded by inFlightLock.
+        var waiters = 0
+        var priorityWaiters = 0 // Waiters that are not prefetch.
 
         @Volatile
         var started = false
@@ -625,7 +543,7 @@ class PdfDocumentManager private constructor(
         private const val PAGE_POOL_SIZE = 4
         private const val MAX_STALE_RETRIES = 3
 
-        /** Default hit-test tolerance in PDF points (about a finger's slop at 1x). */
+        // About a finger size, in PDF points.
         const val HIT_TOLERANCE_PT = 4.0
         const val PREFETCH_AHEAD = 2
         const val KEEP_BEHIND = 2
@@ -633,7 +551,6 @@ class PdfDocumentManager private constructor(
         private const val MAX_BITMAP_BYTES = 32L * 1024 * 1024
         private val threadCounter = AtomicInteger()
 
-        /** Opens a document from any readable [uri] (file:// or content://). */
         suspend fun open(context: Context, uri: Uri, password: String? = null): PdfDocumentManager {
             val resolver = context.applicationContext.contentResolver
             return create {
@@ -646,7 +563,7 @@ class PdfDocumentManager private constructor(
         suspend fun open(file: File, password: String? = null): PdfDocumentManager =
             create { PdfDocument.open(file, password) }
 
-        /** Tests: small cache to force LRU eviction. */
+        // For tests, small cache.
         internal suspend fun open(file: File, cacheMaxBytes: Int): PdfDocumentManager =
             create(cacheMaxBytes) { PdfDocument.open(file, null) }
 
@@ -681,7 +598,7 @@ class PdfDocumentManager private constructor(
             return manager
         }
 
-        /** Fits the bitmap into side and byte limits, keeping the page aspect ratio. */
+        // Keeps bitmap under MAX_BITMAP_SIDE and MAX_BITMAP_BYTES.
         internal fun bitmapSize(widthPx: Int, page: PdfSize): Pair<Int, Int> {
             var width = widthPx.toDouble()
             var height = width * page.height / page.width

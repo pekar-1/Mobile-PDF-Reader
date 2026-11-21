@@ -23,14 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-/**
- * Document-wide text search: query, flags, streamed results, the current
- * hit and next/prev navigation. A new query or flag change cancels the
- * running search; an edit of the document re-runs it.
- *
- * Matching is PDFium's (FPDFText_FindStart): case-insensitive unless
- * [SearchFlags.MATCH_CASE]; diacritics are significant.
- */
+// New query cancels the old search. Polish letters are not ignored (a != ą).
 @Stable
 class SearchState internal constructor(
     private val manager: PdfDocumentManager,
@@ -47,18 +40,17 @@ class SearchState internal constructor(
     var isSearching by mutableStateOf(false)
         private set
 
-    /** Incremented on every navigation; the viewer scrolls to [current] when it changes. */
+    // +1 on next/prev, viewer scrolls when it changes
     var navigationTick by mutableIntStateOf(0)
         private set
 
     val current: SearchHit? get() = results.hits.getOrNull(currentIndex)
 
-    /** Set by the viewer: the search starts here and the first hit is the nearest after it. */
+    // Search starts from this page.
     internal var firstVisiblePage: () -> Int = { 0 }
 
     private var job: Job? = null
 
-    /** Highlights all hits on a page; the current one stronger. */
     val overlay = PageOverlay { pageIndex ->
         val hits = results.byPage[pageIndex] ?: return@PageOverlay
         val current = current
@@ -137,7 +129,6 @@ class SearchState internal constructor(
     }
 }
 
-/** Search state bound to [manager]; re-runs the search after every document edit. */
 @Composable
 fun rememberSearchState(manager: PdfDocumentManager): SearchState {
     val scope = rememberCoroutineScope()

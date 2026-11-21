@@ -5,13 +5,10 @@ import android.content.Context
 import android.content.res.Configuration
 import java.util.Locale
 
-/**
- * In-app UI language. Every activity wraps its base context with [wrap];
- * [set] saves the choice and recreates the calling activity.
- */
+// Every activity must call wrap() in attachBaseContext.
 // shortcut: SharedPreferences instead of DataStore, move when more settings arrive.
 object AppLanguage {
-    /** Empty tag = follow the system language. */
+    // "" = system language
     const val SYSTEM = ""
     val supported = listOf("pl", "en")
 

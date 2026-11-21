@@ -8,10 +8,7 @@ import com.example.pdf_reader.pdfium.jni.PdfiumNative
 import com.example.pdf_reader.pdfium.jni.SaveNative
 import java.io.File
 
-/**
- * PDF document backed by PDFium. The object itself is not thread-safe; native
- * calls are serialized by a global lock. Closing it closes all its open pages.
- */
+// Not thread-safe, use it through PdfDocumentManager. Closing closes all open pages.
 class PdfDocument private constructor(private var handle: Long) : AutoCloseable {
 
     private val openPages = mutableListOf<PdfPage>()
@@ -20,7 +17,6 @@ class PdfDocument private constructor(private var handle: Long) : AutoCloseable 
 
     val pageCount: Int get() = CoreNative.nativeGetPageCount(requireHandle())
 
-    /** Size of the page at [index] in PDF points, without loading the page. */
     fun pageSize(index: Int): PdfSize =
         CoreNative.nativeGetPageSizeByIndex(requireHandle(), index).let { PdfSize(it[0], it[1]) }
 
@@ -29,21 +25,14 @@ class PdfDocument private constructor(private var handle: Long) : AutoCloseable 
         return PdfPage(this, index, pageHandle).also { openPages += it }
     }
 
-    /**
-     * Deletes the page at [index] (FPDFPage_Delete). That page must not be open.
-     * Open pages after it get their [PdfPage.index] shifted down by one.
-     */
+    // Page must not be open. Open pages after it get index - 1.
     fun deletePage(index: Int) {
         check(openPages.none { it.index == index }) { "Close page $index before deleting it" }
         PageEditNative.nativeDeletePage(requireHandle(), index)
         openPages.filter { it.index > index }.forEach { it.index-- }
     }
 
-    /**
-     * Copies pages from [source] into this document at [insertIndex]
-     * (FPDF_ImportPages). [pageRange] is 1-based, e.g. `"1,3,5-7"`; `null`
-     * imports all pages. Keep [source] open until this document is saved.
-     */
+    // pageRange is 1-based, like "1,3,5-7", null = all pages.
     fun importPages(source: PdfDocument, pageRange: String? = null, insertIndex: Int = pageCount) {
         val before = pageCount
         val ok = ImportNative.nativeImportPages(
@@ -54,11 +43,7 @@ class PdfDocument private constructor(private var handle: Long) : AutoCloseable 
         openPages.filter { it.index >= insertIndex }.forEach { it.index += added }
     }
 
-    /**
-     * Writes a copy of the document to [output] (FPDF_SaveAsCopy). The
-     * descriptor must be writable and empty, and must not be the one this
-     * document reads from. [flags]: see [SaveFlags].
-     */
+    // output must be empty and not the same file we read from.
     fun saveTo(output: ParcelFileDescriptor, flags: Int = SaveFlags.NONE) {
         if (!SaveNative.nativeSaveAsCopy(requireHandle(), output.fd, flags)) {
             throw PdfiumException("Cannot save document", CoreNative.nativeGetLastError())
@@ -91,7 +76,7 @@ class PdfDocument private constructor(private var handle: Long) : AutoCloseable 
     }
 
     companion object {
-        /** Opens a document. The fd is duplicated natively; [input] may be closed afterwards. */
+        // Native code dups the fd, so input can be closed after this.
         fun open(input: ParcelFileDescriptor, password: String? = null): PdfDocument {
             PdfiumNative.ensureInitialized()
             return PdfDocument(CoreNative.nativeOpenDocument(input.fd, password))
@@ -101,7 +86,6 @@ class PdfDocument private constructor(private var handle: Long) : AutoCloseable 
             ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
                 .use { open(it, password) }
 
-        /** Creates an empty in-memory document (FPDF_CreateNewDocument). */
         fun createNew(): PdfDocument {
             PdfiumNative.ensureInitialized()
             return PdfDocument(CoreNative.nativeCreateNewDocument())

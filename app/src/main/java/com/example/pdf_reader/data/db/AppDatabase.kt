@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [DocumentEntity::class, TagEntity::class, DocumentTagCrossRef::class],
-    version = 1,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,8 +26,9 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     NAME,
                 )
-                    // Pre-release dev builds used schema version 2 without migrations. The schema was
-                    // reset to 1, so wipe those databases. Upgrades must ship a Migration/AutoMigration.
+                    // Pre-release dev builds shipped incompatible schemas as versions 1 and 2 without
+                    // migrations, so wipe those. From 3 on, upgrades must ship a Migration/AutoMigration.
+                    .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1, 2)
                     .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                     .also { instance = it }

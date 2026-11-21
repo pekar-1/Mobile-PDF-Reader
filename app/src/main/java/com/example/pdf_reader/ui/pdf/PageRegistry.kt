@@ -6,18 +6,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.LayoutCoordinates
 
-/** A point on a page in normalized coordinates (0..1, origin top-left). */
 internal data class PageHit(val pageIndex: Int, val nx: Float, val ny: Float)
 
-/**
- * Coordinates of the pages currently composed, so gestures and handles can
- * map between window coordinates and pages. Works with any zoom or pinch
- * transform, since all mapping goes through [LayoutCoordinates].
- */
+// Positions of visible pages, to map a touch point to a page.
 internal class PageRegistry {
     private val pages = HashMap<Int, LayoutCoordinates>()
 
-    /** Incremented whenever a page moves; read it to follow scrolling and zoom. */
+    // +1 when any page moves
     var tick by mutableIntStateOf(0)
         private set
 
@@ -32,11 +27,7 @@ internal class PageRegistry {
 
     fun coordinates(pageIndex: Int): LayoutCoordinates? = pages[pageIndex]?.takeIf { it.isAttached }
 
-    /**
-     * Page under [window] position. Between pages (or beside them) it picks
-     * the vertically nearest page and clamps the point onto it, so drags in
-     * gaps still extend the selection.
-     */
+    // Between pages it picks the nearest one, so dragging in the gap still works.
     fun hitTest(window: Offset): PageHit? {
         var best: PageHit? = null
         var bestDistance = Float.MAX_VALUE

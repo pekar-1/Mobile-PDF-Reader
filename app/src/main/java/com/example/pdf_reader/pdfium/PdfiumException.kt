@@ -1,9 +1,6 @@
 package com.example.pdf_reader.pdfium
 
-/**
- * PDFium failure. [errorCode] is a `FPDF_ERR_*` value. Created from native code
- * via the `(String, Int)` constructor; keep that signature unchanged.
- */
+// Created from C++ with (String, Int), don't change the constructor.
 class PdfiumException(message: String, val errorCode: Int) :
     Exception("$message (code $errorCode)") {
 

@@ -1,7 +1,3 @@
-// Text search module: FPDFText_FindStart, FPDFText_FindNext
-// (+ FindPrev, GetSchResultIndex, GetSchCount, FindClose).
-// Kotlin side: com.example.pdf_reader.pdfium.jni.SearchNative
-
 #include <jni.h>
 
 #include <string>
@@ -50,13 +46,6 @@ jboolean findNext(JNIEnv* env, jclass, jlong searchHandle) {
     return FPDFText_FindNext(search) ? JNI_TRUE : JNI_FALSE;
 }
 
-jboolean findPrev(JNIEnv* env, jclass, jlong searchHandle) {
-    PDFIUM_LOCK();
-    auto search = requireHandle<FPDF_SCHHANDLE>(env, searchHandle, kSearchClosed);
-    if (search == nullptr) return JNI_FALSE;
-    return FPDFText_FindPrev(search) ? JNI_TRUE : JNI_FALSE;
-}
-
 // Char index of the current match start.
 jint getResultIndex(JNIEnv* env, jclass, jlong searchHandle) {
     PDFIUM_LOCK();
@@ -83,7 +72,6 @@ void findClose(JNIEnv*, jclass, jlong searchHandle) {
 const JNINativeMethod kMethods[] = {
     {"nativeFindStart", "(JLjava/lang/String;II)J", reinterpret_cast<void*>(findStart)},
     {"nativeFindNext", "(J)Z", reinterpret_cast<void*>(findNext)},
-    {"nativeFindPrev", "(J)Z", reinterpret_cast<void*>(findPrev)},
     {"nativeGetSchResultIndex", "(J)I", reinterpret_cast<void*>(getResultIndex)},
     {"nativeGetSchCount", "(J)I", reinterpret_cast<void*>(getResultCount)},
     {"nativeFindClose", "(J)V", reinterpret_cast<void*>(findClose)},

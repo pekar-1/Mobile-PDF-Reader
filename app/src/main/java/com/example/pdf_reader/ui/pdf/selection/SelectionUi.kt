@@ -43,12 +43,8 @@ import kotlin.math.roundToInt
 
 private val HandleSize = 24.dp
 
-/**
- * Long press selects a word, dragging on extends it (also onto other pages);
- * a tap clears the selection, or else goes to [onTap] (normalized page point).
- * Horizontal zoom panning is paused while
- * dragging, and dragging near the viewer edge scrolls via [autoScroll].
- */
+// Long press = select word, drag = extend. Tap clears selection or calls onTap.
+// Dragging near top/bottom edge scrolls.
 @Composable
 internal fun Modifier.selectionGestures(
     selection: SelectionState,
@@ -85,8 +81,7 @@ internal fun Modifier.selectionGestures(
             )
         }
         .pointerInput(selection, pageIndex) {
-            // Quick tap clears the selection. Not detectTapGestures: with onLongPress it
-            // consumes the rest of a long press, which would cancel the selection drag.
+            // Not detectTapGestures, because with onLongPress it eats the drag after long press.
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val up = waitForUpOrCancellation() ?: return@awaitEachGesture // Scrolled or dragged.
@@ -98,10 +93,7 @@ internal fun Modifier.selectionGestures(
         }
 }
 
-/**
- * Both selection handles, drawn in the viewer's transformed layer ([layer])
- * above the pages, so a handle drag can cross page boundaries.
- */
+// Drawn above all pages, so a handle can be dragged to another page.
 @Composable
 internal fun SelectionHandles(
     selection: SelectionState,
@@ -178,7 +170,6 @@ private fun SelectionHandle(
     )
 }
 
-/** Tip of a handle in [layer] coordinates: bottom-left of the first char or bottom-right of the last. */
 private fun handleTip(isStart: Boolean, selection: SelectionState, registry: PageRegistry, layer: ViewportRef): Offset? {
     val position = (if (isStart) selection.start else selection.end) ?: return null
     val box = (if (isStart) selection.startBox else selection.endBox) ?: return null
@@ -191,7 +182,6 @@ private fun handleTip(isStart: Boolean, selection: SelectionState, registry: Pag
     return layerCoords.localPositionOf(page, local)
 }
 
-/** Height of the handle's line on screen, in window pixels. */
 private fun lineHeightPx(isStart: Boolean, selection: SelectionState, registry: PageRegistry): Float {
     val position = (if (isStart) selection.start else selection.end) ?: return 0f
     val box = (if (isStart) selection.startBox else selection.endBox) ?: return 0f
@@ -201,10 +191,7 @@ private fun lineHeightPx(isStart: Boolean, selection: SelectionState, registry: 
     return bottom.y - top.y
 }
 
-/**
- * Shows the system text toolbar (Copy, Select all) over the selection while
- * nothing moves, and hides it during drags, scrolls and zoom gestures.
- */
+// System Copy / Select all menu, hidden while something moves.
 @Composable
 internal fun SelectionToolbar(
     selection: SelectionState,
@@ -241,7 +228,6 @@ internal fun SelectionToolbar(
     DisposableEffect(toolbar) { onDispose { toolbar.hide() } }
 }
 
-/** Union of the first and last char boxes in root coordinates (either may be off-screen). */
 private fun selectionBoundsInRoot(selection: SelectionState, registry: PageRegistry): Rect? {
     fun rootRect(position: TextPosition?, box: NormRect?): Rect? {
         if (position == null || box == null) return null

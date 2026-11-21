@@ -1,6 +1,3 @@
-// Page import module: FPDF_ImportPages.
-// Kotlin side: com.example.pdf_reader.pdfium.jni.ImportNative
-
 #include <jni.h>
 
 #include <string>

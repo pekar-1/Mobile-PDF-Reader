@@ -27,7 +27,7 @@ class LibraryRepository(
 ) {
     private val dao = db.documentDao()
 
-    /** Outlives screens, so writes started from onPause finish after the Activity is gone. */
+    // Not tied to a screen, so saving in onPause still finishes.
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun observeDocuments(): Flow<List<DocumentWithTags>> = dao.observeAll()
@@ -39,7 +39,6 @@ class LibraryRepository(
         return rememberDocument(hash, uri.toString(), name)
     }
 
-    /** Inserts a new document or refreshes uri/name/lastOpenedAt of an existing one, atomically. */
     suspend fun rememberDocument(hash: String, uri: String, name: String): DocumentEntity {
         val now = System.currentTimeMillis()
         return db.withTransaction {
@@ -66,7 +65,6 @@ class LibraryRepository(
 
     suspend fun updateLastPage(hash: String, pageIndex: Int) = dao.updateLastPage(hash, pageIndex)
 
-    /** Fire-and-forget variant for lifecycle callbacks that must not block the main thread. */
     fun saveLastPageAsync(hash: String, pageIndex: Int) {
         appScope.launch { dao.updateLastPage(hash, pageIndex) }
     }
@@ -81,10 +79,7 @@ class LibraryRepository(
 
     suspend fun setPinned(hash: String, pinned: Boolean) = dao.setPinned(hash, pinned)
 
-    /**
-     * Tags are global and case-insensitive. The first spelling of a tag is kept; the color is
-     * shared by every document and the most recent choice wins.
-     */
+    // Tags are shared by all documents and case-insensitive. Last chosen color wins.
     suspend fun addTag(hash: String, raw: String, colorArgb: Int) {
         val tag = raw.trim()
         if (tag.isEmpty()) return
@@ -102,7 +97,7 @@ class LibraryRepository(
         }
     }
 
-    /** Removes the document from the library. The PDF file itself is never touched. */
+    // Only removes it from the library, the PDF file stays.
     suspend fun removeDocument(hash: String) {
         val document = db.withTransaction {
             dao.get(hash).also {
