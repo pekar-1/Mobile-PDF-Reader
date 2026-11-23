@@ -31,6 +31,9 @@
     <string name="library_remove_title">Usunąć z biblioteki?</string>
     <string name="library_remove_body">Plik „%1$s” zostanie usunięty z biblioteki, ale pozostanie na urządzeniu.</string>
     <string name="library_file_unavailable">Nie można już otworzyć „%1$s”. Plik mógł zostać przeniesiony lub usunięty albo cofnięto dostęp. Usunąć go z biblioteki?</string>
+    <string name="library_card_remove">Usuń z biblioteki</string>
+    <string name="library_card_edit_pages">Edytuj strony</string>
+    <string name="library_card_merge">Połącz z innymi</string>
 
     <!-- New tag dialog -->
     <string name="tag_dialog_title">Nowy tag</string>

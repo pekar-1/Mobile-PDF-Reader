@@ -87,6 +87,8 @@ fun LibraryScreen(
     onRequestRemove: (DocumentWithTags) -> Unit,
     onConfirmRemove: () -> Unit,
     onDismissRemove: () -> Unit,
+    onEditPages: (DocumentWithTags) -> Unit,
+    onMergeWith: (DocumentWithTags) -> Unit,
     language: String,
     onLanguageChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -94,6 +96,7 @@ fun LibraryScreen(
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var pinnedExpanded by rememberSaveable { mutableStateOf(true) }
     var tagTarget by remember { mutableStateOf<String?>(null) }
+    var cardMenu by remember { mutableStateOf<DocumentWithTags?>(null) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -124,125 +127,128 @@ fun LibraryScreen(
         },
         modifier = modifier.fillMaxSize(),
     ) {
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            LibraryHeader(
-                query = query,
-                searchOpen = searching,
-                onQueryChange = onQueryChange,
-                onOpenSearch = { searchOpen = true },
-                onCloseSearch = {
-                    searchOpen = false
-                    onQueryChange("")
-                },
-                onOpenSidebar = { scope.launch { drawerState.open() } },
-            )
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                LibraryHeader(
+                    query = query,
+                    searchOpen = searching,
+                    onQueryChange = onQueryChange,
+                    onOpenSearch = { searchOpen = true },
+                    onCloseSearch = {
+                        searchOpen = false
+                        onQueryChange("")
+                    },
+                    onOpenSidebar = { scope.launch { drawerState.open() } },
+                )
 
-            when {
-                emptyLibrary -> EmptyLibrary(Modifier.fillMaxSize())
-                noHits -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        stringResource(R.string.library_no_results),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                when {
+                    emptyLibrary -> EmptyLibrary(Modifier.fillMaxSize())
+                    noHits -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            stringResource(R.string.library_no_results),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 20.dp,
-                        end = 20.dp,
-                        top = 8.dp,
-                        bottom = 96.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (pinned.isNotEmpty()) {
-                        item(key = "pinned-block") {
-                            Column {
-                                SectionHeader(
-                                    title = stringResource(R.string.library_pinned),
-                                    expanded = pinnedExpanded,
-                                    onToggle = { pinnedExpanded = !pinnedExpanded },
-                                )
-                                AnimatedVisibility(
-                                    visible = pinnedExpanded,
-                                    enter = expandVertically(CollapseSizeSpec) + fadeIn(CollapseSpec),
-                                    exit = shrinkVertically(CollapseSizeSpec) + fadeOut(CollapseSpec),
-                                ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        pinned.forEach { item ->
-                                            DocumentCard(
-                                                item = item,
-                                                nowMs = nowMs,
-                                                onOpen = { onOpenDocument(item) },
-                                                onLongPress = { onRequestRemove(item) },
-                                                onTogglePin = {
-                                                    onTogglePin(
-                                                        item.document.hash,
-                                                        !item.document.pinned
-                                                    )
-                                                },
-                                                onAddTag = { tagTarget = item.document.hash },
-                                                onRemoveTag = {
-                                                    onRemoveTag(item.document.hash, it)
-                                                },
-                                            )
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (pinned.isNotEmpty()) {
+                            item(key = "pinned-block") {
+                                Column {
+                                    SectionHeader(
+                                        title = stringResource(R.string.library_pinned),
+                                        expanded = pinnedExpanded,
+                                        onToggle = { pinnedExpanded = !pinnedExpanded },
+                                    )
+                                    AnimatedVisibility(
+                                        visible = pinnedExpanded,
+                                        enter = expandVertically(CollapseSizeSpec) + fadeIn(
+                                            CollapseSpec
+                                        ),
+                                        exit = shrinkVertically(CollapseSizeSpec) + fadeOut(
+                                            CollapseSpec
+                                        ),
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            pinned.forEach { item ->
+                                                DocumentCard(
+                                                    item = item,
+                                                    nowMs = nowMs,
+                                                    onOpen = { onOpenDocument(item) },
+                                                    onLongPress = { cardMenu = item },
+                                                    onTogglePin = {
+                                                        onTogglePin(
+                                                            item.document.hash,
+                                                            !item.document.pinned
+                                                        )
+                                                    },
+                                                    onAddTag = { tagTarget = item.document.hash },
+                                                    onRemoveTag = {
+                                                        onRemoveTag(item.document.hash, it)
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    if (recent.isNotEmpty()) {
-                        item(key = "recent-header") {
-                            if (pinned.isNotEmpty()) Spacer(Modifier.height(8.dp))
-                            Text(
-                                stringResource(R.string.library_recent),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp, top = 4.dp),
-                            )
-                        }
-                        items(recent, key = { it.document.hash }) { item ->
-                            DocumentCard(
-                                item = item,
-                                nowMs = nowMs,
-                                onOpen = { onOpenDocument(item) },
-                                onLongPress = { onRequestRemove(item) },
-                                onTogglePin = {
-                                    onTogglePin(item.document.hash, !item.document.pinned)
-                                },
-                                onAddTag = { tagTarget = item.document.hash },
-                                onRemoveTag = { onRemoveTag(item.document.hash, it) },
-                            )
+                        if (recent.isNotEmpty()) {
+                            item(key = "recent-header") {
+                                if (pinned.isNotEmpty()) Spacer(Modifier.height(8.dp))
+                                Text(
+                                    stringResource(R.string.library_recent),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(
+                                        start = 4.dp, bottom = 2.dp, top = 4.dp
+                                    ),
+                                )
+                            }
+                            items(recent, key = { it.document.hash }) { item ->
+                                DocumentCard(
+                                    item = item,
+                                    nowMs = nowMs,
+                                    onOpen = { onOpenDocument(item) },
+                                    onLongPress = { cardMenu = item },
+                                    onTogglePin = {
+                                        onTogglePin(item.document.hash, !item.document.pinned)
+                                    },
+                                    onAddTag = { tagTarget = item.document.hash },
+                                    onRemoveTag = { onRemoveTag(item.document.hash, it) },
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        OpenPdfButton(
-            onClick = onOpenPicker,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 18.dp, bottom = 16.dp),
-        )
+            OpenPdfButton(
+                onClick = onOpenPicker,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 18.dp, bottom = 16.dp),
+            )
 
-        if (opening) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.72f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
+            if (opening) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.72f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
             }
         }
-    }
     }
 
     val hashForTag = tagTarget
@@ -252,6 +258,26 @@ fun LibraryScreen(
             onConfirm = { value, color ->
                 onAddTag(hashForTag, value, color)
                 tagTarget = null
+            },
+        )
+    }
+
+    val menuItem = cardMenu
+    if (menuItem != null) {
+        DocumentCardMenu(
+            item = menuItem,
+            onDismiss = { cardMenu = null },
+            onRemove = {
+                cardMenu = null
+                onRequestRemove(menuItem)
+            },
+            onEditPages = {
+                cardMenu = null
+                onEditPages(menuItem)
+            },
+            onMergeWith = {
+                cardMenu = null
+                onMergeWith(menuItem)
             },
         )
     }
@@ -338,7 +364,9 @@ private fun LibraryHeader(
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onOpenSidebar) {
-                    Icon(Icons.Outlined.Menu, contentDescription = stringResource(R.string.menu_open))
+                    Icon(
+                        Icons.Outlined.Menu, contentDescription = stringResource(R.string.menu_open)
+                    )
                 }
                 Text(
                     stringResource(R.string.app_name),

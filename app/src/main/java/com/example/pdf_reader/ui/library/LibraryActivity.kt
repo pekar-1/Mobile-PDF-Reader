@@ -84,6 +84,8 @@ class LibraryActivity : ComponentActivity() {
                         onRequestRemove = viewModel::requestRemove,
                         onConfirmRemove = viewModel::confirmRemove,
                         onDismissRemove = viewModel::dismissRemove,
+                        onEditPages = { },
+                        onMergeWith = { },
                         language = AppLanguage.get(this@LibraryActivity),
                         onLanguageChange = { AppLanguage.set(this@LibraryActivity, it) },
                         modifier = Modifier.padding(innerPadding),

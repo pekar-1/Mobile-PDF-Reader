@@ -31,6 +31,9 @@
     <string name="library_remove_title">Remove from library?</string>
     <string name="library_remove_body">“%1$s” will be removed from the library. The file on your device is not deleted.</string>
     <string name="library_file_unavailable">“%1$s” can no longer be opened. It may have been moved or deleted, or access was revoked. Remove it from the library?</string>
+    <string name="library_card_remove">Remove from library</string>
+    <string name="library_card_edit_pages">Edit pages</string>
+    <string name="library_card_merge">Merge with others</string>
 
     <!-- New tag dialog -->
     <string name="tag_dialog_title">New tag</string>
