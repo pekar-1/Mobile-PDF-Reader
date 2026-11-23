@@ -25,14 +25,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -385,20 +385,16 @@ private fun languageLabel(tag: String): String = when (tag) {
 
 @Composable
 private fun OpenPdfButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(
+    FloatingActionButton(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 3.dp
-        ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
     ) {
-        Text(stringResource(R.string.library_open_pdf), fontWeight = FontWeight.Medium)
+        Icon(
+            Icons.Filled.Add,
+            contentDescription = stringResource(R.string.library_open_pdf),
+        )
     }
 }
 
