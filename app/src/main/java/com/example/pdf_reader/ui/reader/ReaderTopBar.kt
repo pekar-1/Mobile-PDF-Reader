@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CropPortrait
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material3.Icon
@@ -39,6 +40,8 @@ fun ReaderTopBar(
     onModeChange: (ReadingMode) -> Unit,
     searchOpen: Boolean,
     onToggleSearch: () -> Unit,
+    nightMode: Boolean,
+    onNightModeChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -62,6 +65,19 @@ fun ReaderTopBar(
             PageBadge(page = pageIndex + 1, total = pageCount)
         }
         ReadingModeSelector(mode = mode, onModeChange = onModeChange)
+        IconButton(onClick = { onNightModeChange(!nightMode) }) {
+            Icon(
+                Icons.Outlined.DarkMode,
+                contentDescription = stringResource(
+                    if (nightMode) R.string.reader_night_mode_off else R.string.reader_night_mode_on,
+                ),
+                tint = if (nightMode) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
         IconButton(onClick = onToggleSearch) {
             Icon(
                 Icons.Outlined.Search,

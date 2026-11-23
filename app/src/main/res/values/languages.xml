@@ -10,8 +10,12 @@
 
     <!-- Menu / settings -->
     <string name="menu_open">Menu</string>
+    <string name="settings_title">Settings</string>
     <string name="settings_language">Language</string>
     <string name="language_system">System default</string>
+    <string name="settings_theme">Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
 
     <!-- Library -->
     <string name="library_search_placeholder">Name or tag</string>
@@ -62,6 +66,8 @@
     <string name="viewer_render_error">Render error: %1$s</string>
     <string name="viewer_no_app_for_link">No app can open this link</string>
     <string name="reader_back">Back</string>
+    <string name="reader_night_mode_on">Night mode on</string>
+    <string name="reader_night_mode_off">Night mode off</string>
 
     <!-- Search -->
     <string name="search_placeholder">Search document</string>

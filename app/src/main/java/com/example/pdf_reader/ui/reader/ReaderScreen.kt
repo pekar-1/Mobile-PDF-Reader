@@ -38,6 +38,9 @@ import com.example.pdf_reader.R
 import com.example.pdf_reader.ui.pdf.PdfViewer
 import com.example.pdf_reader.ui.pdf.ReadingMode
 import com.example.pdf_reader.ui.pdf.search.PdfSearchBar
+import com.example.pdf_reader.data.AppSettings
+import com.example.pdf_reader.ui.isDarkTheme
+import com.example.pdf_reader.ui.rememberThemeMode
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 
@@ -56,6 +59,8 @@ internal fun ReaderScreen(
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var readingMode by rememberSaveable { mutableStateOf(ReadingMode.Vertical) }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
+    val (themeMode, setThemeMode) = rememberThemeMode()
+    val nightMode = isDarkTheme(themeMode)
     val density = LocalDensity.current
     var chromeHeightPx by remember { mutableIntStateOf(0) }
     val pageCount = manager?.pageCount?.collectAsState()?.value ?: 0
@@ -92,6 +97,7 @@ internal fun ReaderScreen(
                         search = search,
                         onTap = { toggleChrome() },
                         topInset = topInset,
+                        nightMode = nightMode,
                     )
                 } else {
                     val start = pageIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
@@ -116,6 +122,7 @@ internal fun ReaderScreen(
                             search = search,
                             onTap = { toggleChrome() },
                             topInset = topInset,
+                            nightMode = nightMode,
                         )
                         LaunchedEffect(listState) {
                             snapshotFlow { listState.layoutInfo.viewportEndOffset > 0 }
@@ -162,6 +169,10 @@ internal fun ReaderScreen(
                         onToggleSearch = {
                             searchOpen = !searchOpen
                             if (searchOpen) showChrome()
+                        },
+                        nightMode = nightMode,
+                        onNightModeChange = { wantDark ->
+                            setThemeMode(if (wantDark) AppSettings.THEME_DARK else AppSettings.THEME_LIGHT)
                         },
                         onBack = onBack,
                         modifier = Modifier

@@ -34,8 +34,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +54,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -92,6 +96,19 @@ import kotlin.math.roundToInt
 
 private val PageGap = 8.dp
 
+private val LocalPdfNightMode = compositionLocalOf { false }
+
+private val InvertColorFilter = ColorFilter.colorMatrix(
+    ColorMatrix(
+        floatArrayOf(
+            -1f, 0f, 0f, 0f, 255f,
+            0f, -1f, 0f, 0f, 255f,
+            0f, 0f, -1f, 0f, 255f,
+            0f, 0f, 0f, 1f, 0f,
+        ),
+    ),
+)
+
 // Wait after scroll/zoom before rendering the sharp part.
 private const val HIGH_RES_DEBOUNCE_MS = 150L
 
@@ -113,6 +130,7 @@ fun PdfViewer(
     overlays: List<PageOverlay> = emptyList(),
     onTap: () -> Unit = {},
     topInset: Dp = 0.dp,
+    nightMode: Boolean = false,
 ) {
     val pageCount by manager.pageCount.collectAsState()
     val sizes by manager.pageSizes.collectAsState()
@@ -220,6 +238,7 @@ fun PdfViewer(
     }
 
     val zoomable = mode == ReadingMode.Vertical
+    CompositionLocalProvider(LocalPdfNightMode provides nightMode) {
     BoxWithConstraints(
         modifier
             .clipToBounds()
@@ -298,6 +317,7 @@ fun PdfViewer(
                 },
             )
         }
+    }
     }
 }
 
@@ -514,11 +534,13 @@ internal fun PdfPageImage(
     val sizes by manager.pageSizes.collectAsState()
     val version by manager.version.collectAsState()
     val size = sizes.getOrNull(index) ?: return
+    val nightMode = LocalPdfNightMode.current
+    val pageFilter = if (nightMode) InvertColorFilter else null
 
     BoxWithConstraints(
         modifier = modifier
             .aspectRatio((size.width / size.height).toFloat())
-            .background(Color.White),
+            .background(if (nightMode) Color.Black else Color.White),
         contentAlignment = Alignment.Center,
     ) {
         val layoutWidthPx = if (constraints.hasBoundedWidth) constraints.maxWidth else 0
@@ -593,6 +615,7 @@ internal fun PdfPageImage(
                         image = current.image,
                         dstOffset = IntOffset(r.left, r.top),
                         dstSize = IntSize(r.width(), r.height()),
+                        colorFilter = pageFilter,
                     )
                 }
                 overlays.forEach { with(it) { drawOverlay(index) } }
@@ -604,6 +627,7 @@ internal fun PdfPageImage(
                 contentDescription = stringResource(R.string.viewer_page_description, index + 1),
                 modifier = pageModifier,
                 contentScale = ContentScale.FillBounds,
+                colorFilter = pageFilter,
             )
             PageImageState.Loading -> Box(pageModifier, contentAlignment = Alignment.Center) {
                 Text("${index + 1}", color = Color.LightGray, style = MaterialTheme.typography.headlineMedium)

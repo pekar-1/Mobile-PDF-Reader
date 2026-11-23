@@ -20,6 +20,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.pdf_reader.ui.reader.ReaderActivity
+import com.example.pdf_reader.ui.isDarkTheme
+import com.example.pdf_reader.ui.rememberThemeMode
 import com.example.pdf_reader.ui.theme.Pdf_ReaderTheme
 
 class LibraryActivity : ComponentActivity() {
@@ -33,7 +35,8 @@ class LibraryActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            Pdf_ReaderTheme {
+            val (themeMode, _) = rememberThemeMode()
+            Pdf_ReaderTheme(darkTheme = isDarkTheme(themeMode)) {
                 val documents by viewModel.documents.collectAsStateWithLifecycle()
                 val query by viewModel.query.collectAsStateWithLifecycle()
                 val opening by viewModel.opening.collectAsStateWithLifecycle()

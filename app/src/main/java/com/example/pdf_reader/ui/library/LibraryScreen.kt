@@ -26,28 +26,29 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,9 +64,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.pdf_reader.R
-import com.example.pdf_reader.data.AppLanguage
 import com.example.pdf_reader.data.db.DocumentWithTags
+import com.example.pdf_reader.ui.rememberThemeMode
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val CollapseSpec = tween<Float>(durationMillis = 120)
 private val CollapseSizeSpec = tween<IntSize>(durationMillis = 120)
@@ -93,6 +95,9 @@ fun LibraryScreen(
     var pinnedExpanded by rememberSaveable { mutableStateOf(true) }
     var tagTarget by remember { mutableStateOf<String?>(null) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val (themeMode, setThemeMode) = rememberThemeMode()
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -107,7 +112,19 @@ fun LibraryScreen(
     val emptyLibrary = documents.isEmpty() && query.isBlank()
     val noHits = documents.isEmpty() && query.isNotBlank()
 
-    Box(modifier.fillMaxSize()) {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            LibrarySidebar(
+                language = language,
+                onLanguageChange = onLanguageChange,
+                themeMode = themeMode,
+                onThemeModeChange = setThemeMode,
+            )
+        },
+        modifier = modifier.fillMaxSize(),
+    ) {
+    Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             LibraryHeader(
                 query = query,
@@ -118,8 +135,7 @@ fun LibraryScreen(
                     searchOpen = false
                     onQueryChange("")
                 },
-                language = language,
-                onLanguageChange = onLanguageChange,
+                onOpenSidebar = { scope.launch { drawerState.open() } },
             )
 
             when {
@@ -227,6 +243,7 @@ fun LibraryScreen(
             }
         }
     }
+    }
 
     val hashForTag = tagTarget
     if (hashForTag != null) {
@@ -281,8 +298,7 @@ private fun LibraryHeader(
     onQueryChange: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onCloseSearch: () -> Unit,
-    language: String,
-    onLanguageChange: (String) -> Unit,
+    onOpenSidebar: () -> Unit,
 ) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -321,20 +337,8 @@ private fun LibraryHeader(
             LaunchedEffect(Unit) { focus.requestFocus() }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    var menuOpen by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Outlined.Menu, contentDescription = stringResource(R.string.menu_open))
-                    }
-                    LanguageMenu(
-                        expanded = menuOpen,
-                        current = language,
-                        onDismiss = { menuOpen = false },
-                        onSelect = {
-                            menuOpen = false
-                            onLanguageChange(it)
-                        },
-                    )
+                IconButton(onClick = onOpenSidebar) {
+                    Icon(Icons.Outlined.Menu, contentDescription = stringResource(R.string.menu_open))
                 }
                 Text(
                     stringResource(R.string.app_name),
@@ -348,39 +352,6 @@ private fun LibraryHeader(
             }
         }
     }
-}
-
-@Composable
-private fun LanguageMenu(
-    expanded: Boolean,
-    current: String,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit,
-) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        Text(
-            stringResource(R.string.settings_language),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-        (listOf(AppLanguage.SYSTEM) + AppLanguage.supported).forEach { tag ->
-            DropdownMenuItem(
-                text = { Text(languageLabel(tag)) },
-                onClick = { onSelect(tag) },
-                leadingIcon = {
-                    if (tag == current) Icon(Icons.Filled.Check, contentDescription = null)
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun languageLabel(tag: String): String = when (tag) {
-    "pl" -> "Polski"
-    "en" -> "English"
-    else -> stringResource(R.string.language_system)
 }
 
 @Composable

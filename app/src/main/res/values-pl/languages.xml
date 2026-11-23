@@ -3,8 +3,12 @@
 <resources>
     <!-- Menu / ustawienia -->
     <string name="menu_open">Menu</string>
+    <string name="settings_title">Ustawienia</string>
     <string name="settings_language">Język</string>
     <string name="language_system">Systemowy</string>
+    <string name="settings_theme">Motyw</string>
+    <string name="theme_light">Jasny</string>
+    <string name="theme_dark">Ciemny</string>
 
     <string name="app_name">PDF Reader</string>
 
@@ -70,6 +74,8 @@
     <string name="viewer_render_error">Błąd renderowania: %1$s</string>
     <string name="viewer_no_app_for_link">Brak aplikacji do otwarcia tego linku</string>
     <string name="reader_back">Wstecz</string>
+    <string name="reader_night_mode_on">Włącz tryb nocny</string>
+    <string name="reader_night_mode_off">Wyłącz tryb nocny</string>
 
     <!-- Search -->
     <string name="search_placeholder">Szukaj w dokumencie</string>
