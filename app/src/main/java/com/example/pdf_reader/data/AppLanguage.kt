@@ -12,15 +12,14 @@ object AppLanguage {
     const val SYSTEM = ""
     val supported = listOf("pl", "en")
 
-    private const val PREFS = "settings"
     private const val KEY = "language"
 
     fun get(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, SYSTEM) ?: SYSTEM
+        context.getSharedPreferences(AppSettings.PREFS, Context.MODE_PRIVATE).getString(KEY, SYSTEM) ?: SYSTEM
 
     fun set(activity: Activity, tag: String) {
         if (tag == get(activity)) return
-        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, tag).apply()
+        activity.getSharedPreferences(AppSettings.PREFS, Context.MODE_PRIVATE).edit().putString(KEY, tag).apply()
         activity.recreate()
     }
 

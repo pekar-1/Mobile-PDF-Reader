@@ -3,8 +3,12 @@
 <resources>
     <!-- Menu / ustawienia -->
     <string name="menu_open">Menu</string>
+    <string name="settings_title">Ustawienia</string>
     <string name="settings_language">Język</string>
     <string name="language_system">Systemowy</string>
+    <string name="settings_theme">Motyw</string>
+    <string name="theme_light">Jasny</string>
+    <string name="theme_dark">Ciemny</string>
 
     <string name="app_name">PDF Reader</string>
 
@@ -27,6 +31,9 @@
     <string name="library_remove_title">Usunąć z biblioteki?</string>
     <string name="library_remove_body">Plik „%1$s” zostanie usunięty z biblioteki, ale pozostanie na urządzeniu.</string>
     <string name="library_file_unavailable">Nie można już otworzyć „%1$s”. Plik mógł zostać przeniesiony lub usunięty albo cofnięto dostęp. Usunąć go z biblioteki?</string>
+    <string name="library_card_remove">Usuń z biblioteki</string>
+    <string name="library_card_edit_pages">Edytuj strony</string>
+    <string name="library_card_merge">Połącz z innymi</string>
 
     <!-- New tag dialog -->
     <string name="tag_dialog_title">Nowy tag</string>
@@ -70,6 +77,8 @@
     <string name="viewer_render_error">Błąd renderowania: %1$s</string>
     <string name="viewer_no_app_for_link">Brak aplikacji do otwarcia tego linku</string>
     <string name="reader_back">Wstecz</string>
+    <string name="reader_night_mode_on">Włącz tryb nocny</string>
+    <string name="reader_night_mode_off">Wyłącz tryb nocny</string>
 
     <!-- Search -->
     <string name="search_placeholder">Szukaj w dokumencie</string>

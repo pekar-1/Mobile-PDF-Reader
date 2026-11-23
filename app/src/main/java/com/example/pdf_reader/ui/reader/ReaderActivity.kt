@@ -8,12 +8,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModelProvider
 import com.example.pdf_reader.data.AppLanguage
 import com.example.pdf_reader.data.LibraryRepository
 import com.example.pdf_reader.ui.library.OpenDocument
+import com.example.pdf_reader.ui.isDarkTheme
+import com.example.pdf_reader.ui.rememberThemeMode
 import com.example.pdf_reader.ui.theme.Pdf_ReaderTheme
 
 class ReaderActivity : ComponentActivity() {
@@ -43,8 +46,12 @@ class ReaderActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            Pdf_ReaderTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) {
+            val (themeMode, _) = rememberThemeMode()
+            Pdf_ReaderTheme(darkTheme = isDarkTheme(themeMode)) {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = MaterialTheme.colorScheme.background,
+                ) {
                     ReaderScreen(
                         viewModel = model,
                         displayName = displayName.ifBlank { "PDF" },

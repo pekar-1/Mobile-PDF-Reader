@@ -25,29 +25,30 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,9 +64,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.pdf_reader.R
-import com.example.pdf_reader.data.AppLanguage
 import com.example.pdf_reader.data.db.DocumentWithTags
+import com.example.pdf_reader.ui.rememberThemeMode
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val CollapseSpec = tween<Float>(durationMillis = 120)
 private val CollapseSizeSpec = tween<IntSize>(durationMillis = 120)
@@ -85,6 +87,8 @@ fun LibraryScreen(
     onRequestRemove: (DocumentWithTags) -> Unit,
     onConfirmRemove: () -> Unit,
     onDismissRemove: () -> Unit,
+    onEditPages: (DocumentWithTags) -> Unit,
+    onMergeWith: (DocumentWithTags) -> Unit,
     language: String,
     onLanguageChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -92,7 +96,11 @@ fun LibraryScreen(
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var pinnedExpanded by rememberSaveable { mutableStateOf(true) }
     var tagTarget by remember { mutableStateOf<String?>(null) }
+    var cardMenu by remember { mutableStateOf<DocumentWithTags?>(null) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val (themeMode, setThemeMode) = rememberThemeMode()
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -107,123 +115,138 @@ fun LibraryScreen(
     val emptyLibrary = documents.isEmpty() && query.isBlank()
     val noHits = documents.isEmpty() && query.isNotBlank()
 
-    Box(modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            LibraryHeader(
-                query = query,
-                searchOpen = searching,
-                onQueryChange = onQueryChange,
-                onOpenSearch = { searchOpen = true },
-                onCloseSearch = {
-                    searchOpen = false
-                    onQueryChange("")
-                },
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            LibrarySidebar(
                 language = language,
                 onLanguageChange = onLanguageChange,
+                themeMode = themeMode,
+                onThemeModeChange = setThemeMode,
             )
+        },
+        modifier = modifier.fillMaxSize(),
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                LibraryHeader(
+                    query = query,
+                    searchOpen = searching,
+                    onQueryChange = onQueryChange,
+                    onOpenSearch = { searchOpen = true },
+                    onCloseSearch = {
+                        searchOpen = false
+                        onQueryChange("")
+                    },
+                    onOpenSidebar = { scope.launch { drawerState.open() } },
+                )
 
-            when {
-                emptyLibrary -> EmptyLibrary(Modifier.fillMaxSize())
-                noHits -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        stringResource(R.string.library_no_results),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                when {
+                    emptyLibrary -> EmptyLibrary(Modifier.fillMaxSize())
+                    noHits -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            stringResource(R.string.library_no_results),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 20.dp,
-                        end = 20.dp,
-                        top = 8.dp,
-                        bottom = 96.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (pinned.isNotEmpty()) {
-                        item(key = "pinned-block") {
-                            Column {
-                                SectionHeader(
-                                    title = stringResource(R.string.library_pinned),
-                                    expanded = pinnedExpanded,
-                                    onToggle = { pinnedExpanded = !pinnedExpanded },
-                                )
-                                AnimatedVisibility(
-                                    visible = pinnedExpanded,
-                                    enter = expandVertically(CollapseSizeSpec) + fadeIn(CollapseSpec),
-                                    exit = shrinkVertically(CollapseSizeSpec) + fadeOut(CollapseSpec),
-                                ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        pinned.forEach { item ->
-                                            DocumentCard(
-                                                item = item,
-                                                nowMs = nowMs,
-                                                onOpen = { onOpenDocument(item) },
-                                                onLongPress = { onRequestRemove(item) },
-                                                onTogglePin = {
-                                                    onTogglePin(
-                                                        item.document.hash,
-                                                        !item.document.pinned
-                                                    )
-                                                },
-                                                onAddTag = { tagTarget = item.document.hash },
-                                                onRemoveTag = {
-                                                    onRemoveTag(item.document.hash, it)
-                                                },
-                                            )
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (pinned.isNotEmpty()) {
+                            item(key = "pinned-block") {
+                                Column {
+                                    SectionHeader(
+                                        title = stringResource(R.string.library_pinned),
+                                        expanded = pinnedExpanded,
+                                        onToggle = { pinnedExpanded = !pinnedExpanded },
+                                    )
+                                    AnimatedVisibility(
+                                        visible = pinnedExpanded,
+                                        enter = expandVertically(CollapseSizeSpec) + fadeIn(
+                                            CollapseSpec
+                                        ),
+                                        exit = shrinkVertically(CollapseSizeSpec) + fadeOut(
+                                            CollapseSpec
+                                        ),
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            pinned.forEach { item ->
+                                                DocumentCard(
+                                                    item = item,
+                                                    nowMs = nowMs,
+                                                    onOpen = { onOpenDocument(item) },
+                                                    onLongPress = { cardMenu = item },
+                                                    onTogglePin = {
+                                                        onTogglePin(
+                                                            item.document.hash,
+                                                            !item.document.pinned
+                                                        )
+                                                    },
+                                                    onAddTag = { tagTarget = item.document.hash },
+                                                    onRemoveTag = {
+                                                        onRemoveTag(item.document.hash, it)
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    if (recent.isNotEmpty()) {
-                        item(key = "recent-header") {
-                            if (pinned.isNotEmpty()) Spacer(Modifier.height(8.dp))
-                            Text(
-                                stringResource(R.string.library_recent),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp, top = 4.dp),
-                            )
-                        }
-                        items(recent, key = { it.document.hash }) { item ->
-                            DocumentCard(
-                                item = item,
-                                nowMs = nowMs,
-                                onOpen = { onOpenDocument(item) },
-                                onLongPress = { onRequestRemove(item) },
-                                onTogglePin = {
-                                    onTogglePin(item.document.hash, !item.document.pinned)
-                                },
-                                onAddTag = { tagTarget = item.document.hash },
-                                onRemoveTag = { onRemoveTag(item.document.hash, it) },
-                            )
+                        if (recent.isNotEmpty()) {
+                            item(key = "recent-header") {
+                                if (pinned.isNotEmpty()) Spacer(Modifier.height(8.dp))
+                                Text(
+                                    stringResource(R.string.library_recent),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(
+                                        start = 4.dp, bottom = 2.dp, top = 4.dp
+                                    ),
+                                )
+                            }
+                            items(recent, key = { it.document.hash }) { item ->
+                                DocumentCard(
+                                    item = item,
+                                    nowMs = nowMs,
+                                    onOpen = { onOpenDocument(item) },
+                                    onLongPress = { cardMenu = item },
+                                    onTogglePin = {
+                                        onTogglePin(item.document.hash, !item.document.pinned)
+                                    },
+                                    onAddTag = { tagTarget = item.document.hash },
+                                    onRemoveTag = { onRemoveTag(item.document.hash, it) },
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        OpenPdfButton(
-            onClick = onOpenPicker,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 18.dp, bottom = 16.dp),
-        )
+            OpenPdfButton(
+                onClick = onOpenPicker,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 18.dp, bottom = 16.dp),
+            )
 
-        if (opening) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.72f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
+            if (opening) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.72f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
             }
         }
     }
@@ -235,6 +258,26 @@ fun LibraryScreen(
             onConfirm = { value, color ->
                 onAddTag(hashForTag, value, color)
                 tagTarget = null
+            },
+        )
+    }
+
+    val menuItem = cardMenu
+    if (menuItem != null) {
+        DocumentCardMenu(
+            item = menuItem,
+            onDismiss = { cardMenu = null },
+            onRemove = {
+                cardMenu = null
+                onRequestRemove(menuItem)
+            },
+            onEditPages = {
+                cardMenu = null
+                onEditPages(menuItem)
+            },
+            onMergeWith = {
+                cardMenu = null
+                onMergeWith(menuItem)
             },
         )
     }
@@ -281,8 +324,7 @@ private fun LibraryHeader(
     onQueryChange: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onCloseSearch: () -> Unit,
-    language: String,
-    onLanguageChange: (String) -> Unit,
+    onOpenSidebar: () -> Unit,
 ) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -321,19 +363,9 @@ private fun LibraryHeader(
             LaunchedEffect(Unit) { focus.requestFocus() }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    var menuOpen by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Outlined.Menu, contentDescription = stringResource(R.string.menu_open))
-                    }
-                    LanguageMenu(
-                        expanded = menuOpen,
-                        current = language,
-                        onDismiss = { menuOpen = false },
-                        onSelect = {
-                            menuOpen = false
-                            onLanguageChange(it)
-                        },
+                IconButton(onClick = onOpenSidebar) {
+                    Icon(
+                        Icons.Outlined.Menu, contentDescription = stringResource(R.string.menu_open)
                     )
                 }
                 Text(
@@ -351,54 +383,17 @@ private fun LibraryHeader(
 }
 
 @Composable
-private fun LanguageMenu(
-    expanded: Boolean,
-    current: String,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit,
-) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        Text(
-            stringResource(R.string.settings_language),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-        (listOf(AppLanguage.SYSTEM) + AppLanguage.supported).forEach { tag ->
-            DropdownMenuItem(
-                text = { Text(languageLabel(tag)) },
-                onClick = { onSelect(tag) },
-                leadingIcon = {
-                    if (tag == current) Icon(Icons.Filled.Check, contentDescription = null)
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun languageLabel(tag: String): String = when (tag) {
-    "pl" -> "Polski"
-    "en" -> "English"
-    else -> stringResource(R.string.language_system)
-}
-
-@Composable
 private fun OpenPdfButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(
+    FloatingActionButton(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 3.dp
-        ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
     ) {
-        Text(stringResource(R.string.library_open_pdf), fontWeight = FontWeight.Medium)
+        Icon(
+            Icons.Filled.Add,
+            contentDescription = stringResource(R.string.library_open_pdf),
+        )
     }
 }
 
